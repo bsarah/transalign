@@ -7,6 +7,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.Vector as V
 import System.Directory (createDirectoryIfMissing, removeFile)
 import Control.DeepSeq
+import Control.Arrow (second)
 
 import Blast (readAlignments, BlastAlignment)
 import Align (A(..))
@@ -24,7 +25,7 @@ buildCache xml = do
 -- | Write a set of alignments to a file in a specified directory 
   -- BlastAlignment::(Bytestring,BlastAlignData)
 writeAlignmentCache :: String -> (B.ByteString, [BlastAlignment]) -> IO ()
-writeAlignmentCache dir (qsid,ts) = encodeFile (dir++"/"++B.unpack qsid) $ map convert ts
+writeAlignmentCache dir (qsid,ts) = encodeFile (dir++"/"++B.unpack qsid) $ map ( convert.second V.toList) ts
   where convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest)
 
 
@@ -32,7 +33,7 @@ writeAlignmentCache dir (qsid,ts) = encodeFile (dir++"/"++B.unpack qsid) $ map c
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
 readAlignmentCache dir qsid = do
   x <- BS.readFile (dir++"/"++qsid)
-  let unconvert (name,s,pqs) = name `seq` (name,map (\(p,q) -> (A p q s)) pqs)
+  let unconvert (name,s,pqs) = name `seq` (name, V.fromList $ map (\(p,q) -> (A p q s)) pqs)
   return $!! map unconvert $ decode $ B.fromChunks [x]
 
 instance NFData B.ByteString where
