@@ -1,0 +1,30 @@
+Name:                transalign
+Version:             0.1
+Synopsis:            Annotate genes by transitive alignment
+Description:         
+Homepage:            
+License:             GPL
+Author:              Ketil Malde
+Maintainer:          ketil@malde.org
+Stability:           Experimental
+Category:            Bioinformatics
+Build-type:          Simple
+Cabal-version:       >=1.9.2
+
+Executable transalign
+   Main-Is:        TransAlign.hs
+   Other-modules:  Align, Blast, BlastCache
+   Hs-Source-Dirs: src
+   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring == 0.9.*, binary, directory, deepseq, cmdargs, biocore
+
+Executable blastextract
+   Main-Is:        BlastExtract.hs
+   Other-modules:  Align, Blast, BlastCache
+   Hs-Source-Dirs: src
+   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring == 0.9.*, binary, directory, deepseq, biocore
+
+Executable showcache
+   Main-Is:        ShowCache.hs
+   Other-modules:  Align, Blast, BlastCache
+   Hs-Source-Dirs: src
+   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring == 0.9.*, binary, directory, filepath, deepseq, biocore
