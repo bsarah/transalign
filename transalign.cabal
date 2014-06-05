@@ -15,16 +15,16 @@ Executable transalign
    Main-Is:        TransAlign.hs
    Other-modules:  Align, Blast, BlastCache
    Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring == 0.9.*, binary, directory, deepseq, cmdargs, biocore
+   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring == 0.9.*, binary, directory, deepseq, cmdargs, biocore, vector
 
 Executable blastextract
    Main-Is:        BlastExtract.hs
    Other-modules:  Align, Blast, BlastCache
    Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring == 0.9.*, binary, directory, deepseq, biocore
+   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring == 0.9.*, binary, directory, deepseq, biocore, vector
 
 Executable showcache
    Main-Is:        ShowCache.hs
    Other-modules:  Align, Blast, BlastCache
    Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring == 0.9.*, binary, directory, filepath, deepseq, biocore
+   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring == 0.9.*, binary, directory, filepath, deepseq, biocore, vector

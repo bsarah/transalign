@@ -64,6 +64,7 @@ process_align output spdir (q, hits) = do
   sphits <- M.fromList `fmap` mapM (\h -> do 
                                        ts <- readAlignmentCache (spdir++".d") (B.unpack h)
                                        return (h,ts)) hitnames
+            
   let as = merge_aligns $ collect_aligns (mlu sphits) hits
       mlu m k = maybe [] id $ M.lookup k m
   output q $ reverse $ sortBy (compare `on` fst') $ map add_score as 

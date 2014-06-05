@@ -4,6 +4,7 @@ module BlastCache where
 import Data.Binary
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.Vector as V
 import System.Directory (createDirectoryIfMissing, removeFile)
 import Control.DeepSeq
 
@@ -20,10 +21,12 @@ buildCache xml = do
   mapM_ (writeAlignmentCache dir) =<< readAlignments xml
   removeFile (dir++"/_lock")
 
--- | Write a set of alignments to a file in a specified directory
+-- | Write a set of alignments to a file in a specified directory 
+  -- BlastAlignment::(Bytestring,BlastAlignData)
 writeAlignmentCache :: String -> (B.ByteString, [BlastAlignment]) -> IO ()
 writeAlignmentCache dir (qsid,ts) = encodeFile (dir++"/"++B.unpack qsid) $ map convert ts
   where convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest)
+
 
 -- | Given the directory and a query sequence, extract the alignments
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
