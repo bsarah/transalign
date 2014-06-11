@@ -35,9 +35,9 @@ readAlignmentCache dir qsid = do
   x <- BS.readFile (dir++"/"++qsid)
   let unconvert (name,s,pqs) = name `seq` (name, V.fromList $ map (\(p,q) -> (A p q s)) pqs)
   return $!! map unconvert $ decode $ B.fromChunks [x]
-
+{-
 instance NFData B.ByteString where
   rnf a = a `seq` ()
-  
+-}  
 instance NFData A where
   rnf a = a `seq` ()
