@@ -68,7 +68,7 @@ merge_aligns = map merge_group . groups . filter is_not_empty --groups:: [(sid,a
   where is_not_empty = not . V.null . snd
 
 merge_group :: (Show ssid) => (ssid, V.Vector (Alignment s p q)) -> (ssid, Alignment s p q)
-merge_group (tgt,as) = (tgt , go (V.fromList []) $ group_al as) -- $ map (\(p,xs) -> (p,collect xs)) 
+merge_group (tgt,as) = (tgt , go (V.fromList []) $ group_al''' as) -- $ map (\(p,xs) -> (p,collect xs)) 
   where        
     -- this is just a regular (global? local?) alignment using the 
     -- scores from the provided alignments.  Sparse matrix.
