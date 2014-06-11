@@ -248,6 +248,21 @@ group_al'' :: (Ord p, Ord q, Ord s) => [Alignment s p q] -> [(p,[(q,s)])]
 group_al'' = sort . map (\(x,ys) -> (x,sort ys)) . groups . map (\(p,q,s) -> (p,(q,s))) . concat
 -}
 
+
+
+group_al''' :: V.Vector (Alignment s p q) -> V.Vector (Pos, V.Vector (Pos,Score))
+group_al''' = list2vec . toList . M.unionsWith merge . map toMap . V.toList
+  where merge = M.unionWith max -- (+)                                                                                                                       
+        toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)                                                                  
+        toMap = M.fromAscList . (V.toList) . (V.map) (\(A p q s) -> (fromIntegral p,M.singleton (fromIntegral q) s))
+        toList :: M.IntMap (M.IntMap Score) -> [(Pos, [(Pos, Score)])]
+        toList = map fst2int . M.toAscList . M.map (map fst2int . M.toAscList)
+        fst2int (f,r) = (fromIntegral f,r)
+        list2vec = V.fromList . map (\(a,b) -> (a, V.fromList b))
+
+
+
+
 -- Use a Map p (Map q s): this is faster and uses less memory than the others.
 {-
 group_al''' :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column
