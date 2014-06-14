@@ -1,4 +1,13 @@
 {-# Language OverloadedStrings #-}
+{-# Language TypeFamilies #-}
+{-# Language MultiParamTypeClasses #-}
+{-# Language TemplateHaskell #-}
+{-# Language FlexibleInstances #-}
+-- {-# Language UndecidableInstances #-}                                                                                                                     
+-- {-# Language FlexibleContexts #-}                                                                                                                         
+{-# LANGUAGE CPP #-}
+
+
 module Blast where
 
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -6,10 +15,17 @@ import Bio.BlastXML -- hiding (SeqId)
 import Bio.Core
 import qualified Data.Map as M
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as U
+import Data.Vector.Unboxed.Deriving
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Generic.Mutable
+
+
 import Data.Int
 import Text.Printf
 import GHC.Float (double2Float)
 import Align
+
 
 type BlastAlignData = Alignment Float Int32 Int32
 type BlastAlignment = (B.ByteString,BlastAlignData)
@@ -31,15 +47,15 @@ hit2align p h = [(sname h, a) | a <- map (match2align p) $ matches h]
 -- Warning: blastx-specific!
 -- BlastMatch has two attributes qseq and hseq :: ByteString, additionally q_from,q_to,h_from,h_to as Int 
 match2align :: BlastProg -> BlastMatch -> BlastAlignData
-match2align prog m = V.map add_score $ go qstart hstart (qseq m) (hseq m)
+match2align prog m = G.map add_score $ go qstart hstart (qseq m) (hseq m)
   where (hstep,qstep) = case prog of BlastX -> (1,3) -- blastx? (1,1) else
                                      BlastP -> (1,1)
                                      -- etc.
         go qi hi qsq hsq = case (B.uncons qsq,B.uncons hsq) of
           (Just ('-',qs),Just (_h,hs)) -> go qi (hi+hstep) qs hs
           (Just (_q,qs),Just ('-',hs)) -> go (qi+qstep) hi qs hs
-          (Just (_q,qs),Just (_h,hs))   -> (qi,hi) `V.cons` go (qi+qstep) (hi+hstep) qs hs
-          (Nothing,Nothing)           -> V.empty
+          (Just (_q,qs),Just (_h,hs))   -> (qi,hi) `G.cons` go (qi+qstep) (hi+hstep) qs hs
+          (Nothing,Nothing)           -> G.empty
           _ -> error "Case closed! just to shut up the type checker"
         qstart = case aux m of Frame Minus _ -> negate (q_to m)
                                _ -> q_from m
@@ -113,11 +129,11 @@ test2 = readAlignmentMap "contigs_vs_sprot.xml"
 print_alignment :: B.ByteString -> BlastAlignment -> IO ()
 print_alignment src (tgt,al) = do
   printf "%s\t%s\n" (B.unpack src) (B.unpack tgt)
-  V.mapM_ (printf "%6d\t" . fst') al
+  G.mapM_ (printf "%6d\t" . fst') al
   printf "\n"
-  V.mapM_ (printf "%6.2f\t" . trd') al
+  G.mapM_ (printf "%6.2f\t" . trd') al
   printf "\n"
-  V.mapM_ (printf "%6d\t" . snd') al
+  G.mapM_ (printf "%6d\t" . snd') al
   printf "\n"
   
 fst' :: A -> Int32

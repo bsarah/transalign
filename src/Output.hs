@@ -3,6 +3,11 @@ module Output where
 import qualified Data.ByteString.Lazy.Char8 as B
 import Text.Printf (printf)
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as U
+import Data.Vector.Unboxed.Deriving
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Generic.Mutable
+
 
 import Blast (BlastAlignData, print_alignment)
 import Align (Alignment,score,A(..))
@@ -16,10 +21,10 @@ output_short src = mapM_ (print1 src)
 
 print1 :: B.ByteString -> (Float, B.ByteString, BlastAlignData) -> IO ()
 print1 src (sc,tgt,al) = do
-  let (A p0 q0 _s0) = V.head al
-      (A pn qn _sn) = V.last al
+  let (A p0 q0 _s0) = G.head al
+      (A pn qn _sn) = G.last al
   printf "%s\t%s\t%8.2f\t %6d\t %3.2f\t %5d\t %5d\t %5d\t %5d\n"
-    (B.unpack src) (B.unpack tgt) sc (V.length al) (sc/fromIntegral (V.length al)) p0 pn q0 qn
+    (B.unpack src) (B.unpack tgt) sc (G.length al) (sc/fromIntegral (G.length al)) p0 pn q0 qn
   -- todo: global scores (div by protein length and transcript length)
   -- and local score (div by alignment length)
   

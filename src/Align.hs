@@ -7,16 +7,71 @@
 -}
 
 {-# Language TypeFamilies #-}
+{-# Language MultiParamTypeClasses #-}
+{-# Language TemplateHaskell #-}
+{-# Language FlexibleInstances #-}
+-- {-# Language UndecidableInstances #-}
+-- {-# Language FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 
 module Align where
 
 import qualified Data.IntMap.Strict as M
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as U
+import Data.Vector.Unboxed.Deriving
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Generic.Mutable
 import Data.List (sort,sortBy)
 import Data.Int (Int32)
+import Debug.Trace
+import Control.DeepSeq
+
 
 type Pos = Int32
 type Score = Float
+
+{-
+derivingUnbox "Maybe"
+    [t| (Num a, U.Unbox a) => Maybe a -> (Bool, a) |]
+    [| maybe (False, 0) (\ x -> (True, x)) |]
+    [| \ (b, x) -> if b then Just x else Nothing |]
+-}
+
+{-
+derivingUnbox "Complex"
+    [t| (Unbox a) ⇒ Complex a → (a, a) |]    [| \ (r :+ i) → (r, i) |]    [| \ (r, i) → r :+ i |]
+-}
+
+{-
+
+data Gaussian datapoint = Gaussian
+    { n  :: !Int         -- The number of samples trained on
+    , m1 :: !datapoint   -- The mean (first moment) of the trained distribution
+    , m2 :: !datapoint   -- The variance (second moment) times (n-1)
+    , dc :: !Int         -- The number of "dummy points" that have been added
+    }
+
+
+derivingUnbox "Gaussian"
+[t| (U.Unbox a) => (Gaussian a) -> (Int, a, a, Int) |]
+[| \ (Gaussian n m1 m2 dc) -> (n,m1,m2,dc) |]
+[| \ (n,m1,m2,dc) -> (Gaussian n m1 m2 dc) |]
+
+-}
+
+
+
+
+data A  = A {-# UNPACK #-} !Pos  {-# UNPACK #-} !Pos  {-# UNPACK #-} !Score deriving Show
+
+derivingUnbox "A"
+    [t| A -> (Pos,Pos,Score) |]
+    [| \(A p q s) -> (p,q,s) |]
+    [| \(p,q,s) -> A p q s |]
+
+type Alignment score pos1 pos2 = U.Vector A
+
 
 collect_aligns :: (usid -> [(ssid, Alignment s q r)]) -> [(usid, Alignment s p q)] -> [(ssid,Alignment s p r)]
 collect_aligns sp_lu ups = do -- list monad
@@ -27,15 +82,13 @@ collect_aligns sp_lu ups = do -- list monad
 -- A proper 'Alignment' links positions in one sequence to positions in another,
 -- assigning a score to each link.  The position links are co-linear and one-to-one.
 
-data A = A {-# UNPACK #-} !Pos  {-# UNPACK #-} !Pos  {-# UNPACK #-} !Score deriving Show
-type Alignment score pos1 pos2 = V.Vector A
 
 score :: Alignment s p q -> Score -- s
-score = V.sum . V.map (\(A _ _ s) -> s)
+score = G.sum . G.map (\(A _ _ s) -> s)
 
 -- | Reverse the alignment
 invert :: Alignment s p q -> Alignment s q p
-invert = V.map (\(A x y s) -> (A y x s))
+invert = G.map (\(A x y s) -> (A y x s))
 
 -- | Follow positions via the first 'Alignment', through the second to 
 --   form the transitive alignment.  Note that if the alignments have 
@@ -51,35 +104,39 @@ trans_align _ _ = [] -}
 
 trans_align :: Alignment s p q -> Alignment s q r -> Alignment s p r
 trans_align x y 
-  | V.null x || V.null y = V.empty
-  | otherwise = let (A xp xq xs) = V.head x
-                    (A yq yr ys) = V.head y
-                    xt = V.tail x
-                    yt = V.tail y
+  | G.null x || G.null y = G.empty
+  | otherwise = let (A xp xq xs) = G.head x
+                    (A yq yr ys) = G.head y
+                    xt = G.tail x
+                    yt = G.tail y
                 in
-                 if (xq == yq) then (A xp yr (min xs ys))  `V.cons` trans_align xt yt
+                 if (xq == yq) then (A xp yr (min xs ys))  `G.cons` trans_align xt yt
                  else 
                    if (xq < yq) then trans_align xt y
                    else {-xq > yq =-} trans_align x yt
 
 -- collect hits against the same sequence, and calculate a consensus alignment
 merge_aligns :: (Show ssid, Ord ssid) => [(ssid,Alignment s p q)] -> [(ssid,Alignment s p q)]
-merge_aligns = map merge_group . groups . filter is_not_empty --groups:: [(sid,align)] -> [(sid,[align])]
-  where is_not_empty = not . V.null . snd
+merge_aligns = map merge_group . groups . filter is_not_empty --groups:: [(sid,align)] -> [(sid,V.Vector align)]
+  where is_not_empty = not . G.null . snd
+
+
 
 merge_group :: (Show ssid) => (ssid, V.Vector (Alignment s p q)) -> (ssid, Alignment s p q)
-merge_group (tgt,as) = (tgt , go (V.fromList []) $ group_al''' as) -- $ map (\(p,xs) -> (p,collect xs)) 
-  where        
-    -- this is just a regular (global? local?) alignment using the 
-    -- scores from the provided alignments.  Sparse matrix.
+merge_group (tgt,as) = let bs = group_al''' as 
+                       in (tgt , go (V.fromList []) bs) -- $ map (\(p,xs) -> (p,collect xs)) 
+    where        
+    -- this is just a regular alignment using the 
+    -- scores from the provided alignments. No sparse matrix.
+   -- go :: V.Vector (score, Alignment s p q) -> V.Vector (Pos, V.Vector (Pos,Score)) -> Alignment s p q
     go y x
-      | V.null y && V.null x = error ("last will fail! " ++ show tgt ++ " " ++ show as)
-      | V.null x = V.reverse $ snd $ V.last $ y
-      | V.null y = let (p,xs) = V.head x
-                       rest = V.tail x
-                   in go (V.map (\(q,s)->(s,V.singleton (A p q s))) xs) rest                           
-      | otherwise = let xh = V.head x    
-                        xt = V.tail x
+      | G.null y && G.null x = error ("last will fail! " ++ show tgt ++ " " ++ show as)
+      | G.null x = U.reverse $ snd $ V.last $ y
+      | G.null y = let (p,xs) = G.head x
+                       rest = G.tail x
+                   in go (G.map (\(q,s)->(s,G.singleton (A p q s))) xs) rest                           
+      | otherwise = let xh = G.head x    
+                        xt = G.tail x
                     in go (sort_column $ merge1 y xh) xt
         
     
@@ -118,31 +175,31 @@ merge1 prev@((ts,(A p1 q1 s1):qs1):pc) (p,(q,s):nc)
                        then merge1 pc (p,(q,s):nc)  -- drop this position
                        else (ts+s,(A p q s):(A p1 q1 s1):qs1) : merge1 prev (p,nc) -}
 -- warning: invariant: total-score ts increases down the prev_column!        
-merge1 :: V.Vector (Score, V.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, V.Vector A) --dynamic programming, forward tracking, not many costs: 
+merge1 :: V.Vector (Score, U.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, U.Vector A) --dynamic programming, forward tracking, not many costs: 
 merge1 x y
   | V.null x && (V.null $ snd y) = error "error in merge1, input 0"
   | V.null x = error "error in merge1, empty prev"
   | V.null $ snd y = x
   | otherwise = let (ts,as) = V.head x
                     ht = V.tail x
-                    (A p1 q1 s1) = V.head as
-                    ast = V.tail as
+                    (A p1 q1 s1) = U.head as
+                    ast = U.tail as
                     (p,ys) = y
                     (q,s) = V.head ys
                     nc = V.tail ys
                 in
-                 if q <= q1 then (s,V.singleton (A p q s)) `V.cons` merge1 x (p,nc)
-                 else if V.null ht then (ts + s,((A p q s) `V.cons` ((A p1 q1 s1) `V.cons` ast))) `V.cons` merge1 x (p,nc)
+                 if q <= q1 then (s,U.singleton (A p q s)) `V.cons` merge1 x (p,nc)
+                 else if V.null ht then (ts + s,((A p q s) `G.cons` ((A p1 q1 s1) `G.cons` ast))) `G.cons` merge1 x (p,nc)
                       else let (_,hpc) = V.head ht
-                               (A _ q2 _) = V.head hpc
+                               (A _ q2 _) = U.head hpc
                            in if (q2 < q)
                               then merge1 ht (p, (q,s) `V.cons` nc)
-                              else (ts + s,((A p q s) `V.cons` ((A p1 q1 s1) `V.cons` ast))) `V.cons` merge1 x (p,nc)
+                              else (ts + s,((A p q s) `G.cons` ((A p1 q1 s1) `G.cons` ast))) `G.cons` merge1 x (p,nc)
                     
 -- sort on q-coordinate and filter so scores are increasing
-sort_column :: V.Vector (Score, V.Vector A) -> V.Vector (Score, V.Vector A)
+sort_column :: V.Vector (Score, U.Vector A) -> V.Vector (Score, U.Vector A)
 sort_column = filter_scores . sortBy' (compare `on` qval)
-  where qval (sc,as) = let (A p q s) = V.head as
+  where qval (sc,as) = let (A p q s) = U.head as
                        in q
         f `on` g = \x y -> f (g x) (g y)
         sortBy' f xs = (V.fromList) $ sortBy f (V.toList xs)
@@ -179,7 +236,7 @@ collect []  = []
 
 -- Group alignments against the same target
 -- Basically a quicksort
-groups :: Ord sid => [(sid, align)] -> [(sid, V.Vector align)]
+groups :: Ord sid => [(sid, Alignment s p q)] -> [(sid, V.Vector (Alignment s p q))]
 groups ((s,a):xs) = this : groups less ++  groups more
     where this = (s, V.fromList $ a : map snd (filter ((s==).fst) xs))
           less = filter ((s<).fst) xs
@@ -191,11 +248,11 @@ groups [] = []
 -- the alignments. (This is "al2" in tests).
 -- todo: simultaneously collect in a Map q s?
 -- This is slower than group_al'
+{-
 group_al :: V.Vector (Alignment s p q) -> V.Vector (Pos, V.Vector (Pos,Score))
 group_al = join . (V.foldr1 merge)
   where        
     merge one two
-      | V.null one && (V.null two) = error "group_al input null"
       | V.null one = two
       | V.null two = one
       | otherwise = let (A p1 q1 s1) = V.head one
@@ -215,6 +272,8 @@ group_al = join . (V.foldr1 merge)
                     in if p0 == p then go p0 ((q,s) `V.cons` acc) xs 
                        else (p0, sort' acc) `V.cons` join x
     sort' = (V.fromList) . sort . (V.toList)
+
+-}
       {-  sort' :: V.Vector (Pos,Score) -> V.Vector (Pos,Score) -}
 
 
@@ -248,33 +307,21 @@ group_al'' :: (Ord p, Ord q, Ord s) => [Alignment s p q] -> [(p,[(q,s)])]
 group_al'' = sort . map (\(x,ys) -> (x,sort ys)) . groups . map (\(p,q,s) -> (p,(q,s))) . concat
 -}
 
-
+-- Use a Map p (Map q s): this is faster and uses less memory than the others.
 
 group_al''' :: V.Vector (Alignment s p q) -> V.Vector (Pos, V.Vector (Pos,Score))
-group_al''' = list2vec . toList . M.unionsWith merge . map toMap . V.toList
-  where merge = M.unionWith max -- (+)                                                                                                                       
-        toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)                                                                  
-        toMap = M.fromAscList . (V.toList) . (V.map) (\(A p q s) -> (fromIntegral p,M.singleton (fromIntegral q) s))
-        toList :: M.IntMap (M.IntMap Score) -> [(Pos, [(Pos, Score)])]
-        toList = map fst2int . M.toAscList . M.map (map fst2int . M.toAscList)
-        fst2int (f,r) = (fromIntegral f,r)
-        list2vec = V.fromList . map (\(a,b) -> (a, V.fromList b))
-
-
-
-
--- Use a Map p (Map q s): this is faster and uses less memory than the others.
-{-
-group_al''' :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column
-group_al''' = toList . M.unionsWith merge . map toMap
-  where merge = M.unionWith max -- (+) 
-        toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)
-        toMap = M.fromAscList . map (\(A p q s) -> (fromIntegral p,M.singleton (fromIntegral q) s))
-        toList :: M.IntMap (M.IntMap Score) -> [(Pos, [(Pos, Score)])]
-        toList = map fst2int . M.toAscList . M.map (map fst2int . M.toAscList)
-        fst2int (f,r) = (fromIntegral f,r)
--}
--- testing
+--group_al''' :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column
+--group_al''' xs = let y = list2vec . toList . M.unionsWith merge . map toMap . V.toList $ xs in traceShow("groupal", V.length y) y
+group_al'''= list2vec . toList . M.unionsWith merge . map toMap . V.toList
+    where merge = M.unionWith max -- (+) 
+          --toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)
+          --toMap = M.fromAscList . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,M.singleton (fromIntegral q) s))
+          toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)
+          toMap = M.fromAscList . map (\(p,q,s) -> (p,M.singleton q s)) . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,(fromIntegral q), s))
+          toList :: M.IntMap (M.IntMap Score) -> [(Pos, [(Pos, Score)])]
+          toList = map fst2int . M.toAscList . M.map (map fst2int . M.toAscList)
+          fst2int (f,r) = (fromIntegral f,r)
+          list2vec = V.fromList . map (\(a,b) -> (a, V.fromList b))
 
 {-
 a1, a2 :: Alignment Double Int Int
