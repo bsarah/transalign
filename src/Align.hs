@@ -10,8 +10,6 @@
 {-# Language MultiParamTypeClasses #-}
 {-# Language TemplateHaskell #-}
 {-# Language FlexibleInstances #-}
--- {-# Language UndecidableInstances #-}
--- {-# Language FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 
 module Align where
@@ -30,38 +28,6 @@ import Control.DeepSeq
 
 type Pos = Int32
 type Score = Float
-
-{-
-derivingUnbox "Maybe"
-    [t| (Num a, U.Unbox a) => Maybe a -> (Bool, a) |]
-    [| maybe (False, 0) (\ x -> (True, x)) |]
-    [| \ (b, x) -> if b then Just x else Nothing |]
--}
-
-{-
-derivingUnbox "Complex"
-    [t| (Unbox a) ⇒ Complex a → (a, a) |]    [| \ (r :+ i) → (r, i) |]    [| \ (r, i) → r :+ i |]
--}
-
-{-
-
-data Gaussian datapoint = Gaussian
-    { n  :: !Int         -- The number of samples trained on
-    , m1 :: !datapoint   -- The mean (first moment) of the trained distribution
-    , m2 :: !datapoint   -- The variance (second moment) times (n-1)
-    , dc :: !Int         -- The number of "dummy points" that have been added
-    }
-
-
-derivingUnbox "Gaussian"
-[t| (U.Unbox a) => (Gaussian a) -> (Int, a, a, Int) |]
-[| \ (Gaussian n m1 m2 dc) -> (n,m1,m2,dc) |]
-[| \ (n,m1,m2,dc) -> (Gaussian n m1 m2 dc) |]
-
--}
-
-
-
 
 data A  = A {-# UNPACK #-} !Pos  {-# UNPACK #-} !Pos  {-# UNPACK #-} !Score deriving Show
 
@@ -141,39 +107,9 @@ merge_group (tgt,as) = let bs = group_al''' as
         
     
     
-   {- 
-     go y x = if(V.null y && V.null x) then error ("last will fail! " ++ show tgt ++ " " ++ show as)
-             else if (V.null x) then V.reverse $ snd $ V.last $ y
-                  else let (p,xs) = V.head x
-                           rest = V.tail x
-                       in if(V.null y) then go (V.map (\(q,s)->(s,V.singleton (A p q s))) xs) rest                           
-                          else go (sort_column $ merge1 y (p,xs)) rest
- 
-    
-    -}
-    {-
-    go [] ((p,xs):rest) = go (map (\(q,s)->(s,[(A p q s)])) xs) rest
-    go [] [] = error ("last will fail! " ++ show tgt ++ " " ++ show as)
-    go prev_col  [] = reverse $ snd $ last $ prev_col
-    go prev_col (qss:rest) = go (sort_column $ merge1 prev_col qss) rest
-   -}
-    
-    
     
 -- Merge two columns (the previous column and the next one) in the alignment DP matrix
 -- (t ~ Pos, p ~ Pos, q ~ Pos, a ~ Pos, s ~ Score, t1 ~ Score,  Num t1, Ord t1, Ord a) => 
-    {-
-merge1 :: V.Vector (Score, V.Vector A) -> (Pos, [(Pos, Score)]) -> [(Score, [A])] --dynamic programming, forward tracking, not many costs: 
-merge1 [] _ = error "empty prev in merge1"
-merge1 ((_, []) : _) (_, _ : _) = error "merge1: complex pattern missing"
-merge1 ps (_,[]) = ps 
-merge1 prev@((ts,(A p1 q1 s1):qs1):pc) (p,(q,s):nc) 
-      | q <= q1 = (s,[(A p q s)]) : merge1 prev (p,nc)  -- (p,q,s) is too "high up"
-      | null pc = (ts+s,(A p q s):(A p1 q1 s1):qs1) : merge1 prev (p,nc)  -- run out of prev
-      | otherwise = let (_,(A _ q2 _):_) = head pc 
-                    in if q2 < q {- && ts2 > ts -} 
-                       then merge1 pc (p,(q,s):nc)  -- drop this position
-                       else (ts+s,(A p q s):(A p1 q1 s1):qs1) : merge1 prev (p,nc) -}
 -- warning: invariant: total-score ts increases down the prev_column!        
 merge1 :: V.Vector (Score, U.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, U.Vector A) --dynamic programming, forward tracking, not many costs: 
 merge1 x y
@@ -212,17 +148,6 @@ sort_column = filter_scores . sortBy' (compare `on` qval)
                             zzs = V.tail zs
                         in if ys < xs then filter_scores ((xs,xss) `V.cons` zzs)
                            else (xs,xss) `V.cons` filter_scores ((ys,yss) `V.cons` zzs)
-          {-
-qval (_ts,(A _p q _s):_qs) = q
-        f `on` g = \x y -> f (g x) (g y)
-        filter_scores ((xs,xss):(ys,yss):rest)
-          | ys < xs = filter_scores ((xs,xss):rest)
-          | otherwise = (xs,xss):filter_scores ((ys,yss):rest)
-        filter_scores [x] = [x]
-        filter_scores []  = []
-        
-        
-        -}
         
 -- Add scores for all (q,s) pairs mapping to the same q. Input must be sorted on q.
 collect :: [(Pos, Score)] -> [(Pos, Score)]
