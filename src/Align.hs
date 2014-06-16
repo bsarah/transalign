@@ -68,6 +68,7 @@ trans_align x@((A xp xq xs):xx) y@((A yq yr ys):yy)
 trans_align _ _ = [] -}
 -- NOTE: this is exactly the >>> operator for the "Alignment s" arrow!
 
+{-
 trans_align :: Alignment s p q -> Alignment s q r -> Alignment s p r
 trans_align x y 
   | G.null x || G.null y = G.empty
@@ -80,6 +81,27 @@ trans_align x y
                  else 
                    if (xq < yq) then trans_align xt y
                    else {-xq > yq =-} trans_align x yt
+
+-}
+
+
+trans_align :: Alignment s p q -> Alignment s q r -> Alignment s p r
+trans_align xorig yorig = G.unfoldr go (xorig,yorig) where
+    go (x,y)
+        | G.null x || G.null y = Nothing
+        | otherwise = let (A xp xq xs) = G.unsafeHead x
+                          (A yq yr ys) = G.unsafeHead y
+                          xt = G.unsafeTail x
+                          yt = G.unsafeTail y
+                      in
+                        if (xq == yq) then Just (A xp yr (min xs ys),(xt,yt))
+                        else
+                            if (xq < yq) then go(xt,y)
+                            else go(x,yt)
+
+
+
+
 
 -- collect hits against the same sequence, and calculate a consensus alignment
 merge_aligns :: (Show ssid, Ord ssid) => [(ssid,Alignment s p q)] -> [(ssid,Alignment s p q)]
