@@ -129,10 +129,8 @@ merge_group (tgt,as) = let bs = group_al''' as
         
     
     
-    
--- Merge two columns (the previous column and the next one) in the alignment DP matrix
--- (t ~ Pos, p ~ Pos, q ~ Pos, a ~ Pos, s ~ Score, t1 ~ Score,  Num t1, Ord t1, Ord a) => 
--- warning: invariant: total-score ts increases down the prev_column!        
+
+{-
 merge1 :: V.Vector (Score, U.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, U.Vector A) --dynamic programming, forward tracking, not many costs: 
 merge1 x y
   | V.null x && (V.null $ snd y) = error "error in merge1, input 0"
@@ -153,7 +151,37 @@ merge1 x y
                            in if (q2 < q)
                               then merge1 ht (p, (q,s) `V.cons` nc)
                               else (ts + s,((A p q s) `G.cons` ((A p1 q1 s1) `G.cons` ast))) `G.cons` merge1 x (p,nc)
-                    
+
+-}
+
+    
+-- Merge two columns (the previous column and the next one) in the alignment DP matrix
+-- (t ~ Pos, p ~ Pos, q ~ Pos, a ~ Pos, s ~ Score, t1 ~ Score,  Num t1, Ord t1, Ord a) => 
+-- warning: invariant: total-score ts increases down the prev_column!        
+merge1 :: V.Vector (Score, U.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, U.Vector A) --dynamic programming, forward tracking, not many cos\ts:                                                                                                                                                        
+merge1 x y = V.unfoldr go (Just(x,y))
+    where go Nothing = Nothing
+          go (Just(x,y))
+              | V.null $ snd y = if V.null x then Nothing else Just(V.head x,Just(V.tail x,y))
+              | V.null x = error "error in merge1, empty prev"
+              | otherwise = let (ts,as) = V.unsafeHead x
+                                ht = V.unsafeTail x
+                                (A p1 q1 s1) = U.head as
+                                ast = U.tail as
+                                (p,ys) = y
+                                (q,s) = V.head ys
+                                nc = V.tail ys                  -- x = (ts,as):ht, as = (A p1 q1 s1):ast , y = (p,ys), ys = (q,s):nc                         
+                            in
+                              if q <= q1 then Just((s,U.singleton (A p q s)),Just( x,(p,nc)))
+                              else if V.null ht then Just((ts + s,((A p q s) `G.cons` as)),Just( x, (p,nc)))
+                                   else let (_,hpc) = V.head ht
+                                            (A _ q2 _) = U.head hpc
+                                        in if (q2 < q)
+                                           then go (Just(ht,(p,ys)))
+                                           else Just((ts + s,((A p q s) `G.cons` as)),Just( x, (p,nc)))
+
+
+{-                  
 -- sort on q-coordinate and filter so scores are increasing
 sort_column :: V.Vector (Score, U.Vector A) -> V.Vector (Score, U.Vector A)
 sort_column = filter_scores . sortBy' (compare `on` qval)
@@ -170,6 +198,29 @@ sort_column = filter_scores . sortBy' (compare `on` qval)
                             zzs = V.tail zs
                         in if ys < xs then filter_scores ((xs,xss) `V.cons` zzs)
                            else (xs,xss) `V.cons` filter_scores ((ys,yss) `V.cons` zzs)
+
+-}
+
+-- sort on q-coordinate and filter so scores are increasing                                                                                                 
+sort_column :: V.Vector (Score, U.Vector A) -> V.Vector (Score, U.Vector A)
+sort_column = filter_scores . sortBy' (compare `on` qval)
+  where qval (sc,as) = let (A p q s) = U.head as
+                       in q
+        f `on` g = \x y -> f (g x) (g y)
+        sortBy' f xs = (V.fromList) $ sortBy f (V.toList xs)
+        filter_scores x = V.unfoldr go x
+            where go x
+                      | V.null x = Nothing
+                      | V.length x == 1 = Just (V.head x, V.tail x)
+                      | otherwise = let (xs,xss) = V.unsafeHead x
+                                        zs = V.unsafeTail x
+                                        (ys,yss) = V.head zs
+                                        zzs = V.tail zs
+                                    in if ys < xs then Just((xs,xss), zzs)
+                                       else Just((xs,xss),zs)
+
+
+
         
 -- Add scores for all (q,s) pairs mapping to the same q. Input must be sorted on q.
 collect :: [(Pos, Score)] -> [(Pos, Score)]
