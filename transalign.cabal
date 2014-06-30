@@ -16,7 +16,7 @@ Executable transalign
    Other-modules:  Align, Blast, BlastCache
    Hs-Source-Dirs: src
    Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6
-   Ghc-Options:  -rtsopts -threaded -fprof-auto -Odph -fllvm
+   Ghc-Options:  -rtsopts -threaded -Odph -fllvm -optlo-O3 -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100
 
 Executable blastextract
    Main-Is:        BlastExtract.hs

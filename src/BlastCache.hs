@@ -33,15 +33,19 @@ writeAlignmentCache dir (qsid,ts) = encodeFile (dir++"/"++B.unpack qsid) $ map (
   where convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest)
 
 
--- | Given the directory and a query sequence, extract the alignments
+-- | Given the directory and a query sequence, extract the alignments                                                                                        
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
 readAlignmentCache dir qsid = do
   x <- BS.readFile (dir++"/"++qsid)
-  let unconvert (name,s,pqs) = name `seq` (name, U.fromList $ map (\(p,q) -> (A p q s)) pqs)
+  let unconvert (name,s,pqs) = let nm = B.copy name
+                                   v  = U.fromList $ map (\(p,q) -> (A p q s)) pqs
+                               in  nm `seq` v `seq` (nm, v)
   return $!! map unconvert $ decode $ B.fromChunks [x]
-{-
-instance NFData B.ByteString where
-  rnf a = a `seq` ()
--}  
-instance NFData A where
-  rnf a = a `seq` ()
+
+
+{-                                                                                                                                                           
+instance NFData B.ByteString where                                                                                                                           
+  rnf a = a `seq` ()                                                                                                                                         
+                                                                                                                                                             
+instance NFData A where                                                                                                                                      
+  rnf a = a `seq` ()-}

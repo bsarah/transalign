@@ -129,35 +129,36 @@ merge_group (tgt,as) = let bs = group_al''' as
                     in go (sort_column $ merge1 y xh) xt
         
     
-    
 
-    
--- Merge two columns (the previous column and the next one) in the alignment DP matrix
--- (t ~ Pos, p ~ Pos, q ~ Pos, a ~ Pos, s ~ Score, t1 ~ Score,  Num t1, Ord t1, Ord a) => 
--- warning: invariant: total-score ts increases down the prev_column!        
-merge1 :: V.Vector (Score, U.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, U.Vector A) --dynamic programming, forward tracking, not many cos\ts:                                                                                                                                                        
+-- Merge two columns (the previous column and the next one) in the alignment DP matrix                                                                      
+-- (t ~ Pos, p ~ Pos, q ~ Pos, a ~ Pos, s ~ Score, t1 ~ Score,  Num t1, Ord t1, Ord a) =>                                                                   
+-- warning: invariant: total-score ts increases down the prev_column!                                                                                        
+merge1 :: V.Vector (Score, U.Vector A) -> (Pos, V.Vector (Pos, Score)) -> V.Vector (Score, U.Vector A) --dynamic programming, forward tracking, not many cos\ts:      
 merge1 x y = V.unfoldr go (Just(x,y))
     where go Nothing = Nothing --go :: Maybe(x,y) -> Maybe((score,uvec A),Maybe(x,y))                                                                       
           go (Just(x,y))
               | V.null $ snd y = if V.null x then Nothing else Just(V.head x,Just(V.tail x,y))
               | V.null x = error "error in merge1, empty prev"
-              | q <= q1 = Just((s,U.singleton (A p q s)),Just( x,(p,nc)))
-              | V.null ht = Just((ts + s, (G.unfoldr go' as)) ,Just( x, (p,nc)))
-              | otherwise = let (_,hpc) = V.head ht
+              | G.null $ snd $ V.head x = error "merge1: complex pattern missing"
+              | q <= q1 = Just((s,U.singleton (A p q s)),Just( x,(p,nc))) --prev@((ts,(A p1 q1 s1):qs1):pc) (p,(q,s):nc), x=prev                            
+              | V.null pc = Just( (ts + s, G.unfoldr go' (Just((A p q s),as)) ) , Just( x, (p,nc)) )
+              | otherwise = let (_,hpc) = V.head pc
                                 (A _ q2 _) = U.head hpc
                             in if (q2 < q)
-                               then go (Just(ht,(p,ys)))
-                               else Just((ts + s,(G.unfoldr go' as)) ,Just( x, (p,nc)))
-              where (ts,as) = V.unsafeHead x
-                    ht = V.unsafeTail x
+                               then go (Just(pc,(p,ys)))
+                               else Just((ts + s,(G.unfoldr go' (Just((A p q s),as)))) ,Just( x, (p,nc)))
+             where (ts,as) = V.unsafeHead x
+                    pc = V.unsafeTail x
                     (A p1 q1 s1) = U.head as
-                    ast = U.tail as
+                    qs1 = U.tail as
                     (p,ys) = y
                     (q,s) = V.head ys
-                    nc = V.tail ys        
-                    go' as
-                        |G.null as = Nothing
-                        |otherwise = Just(G.head as,G.tail as)
+                    nc = V.tail ys
+                    go' Nothing = Nothing
+                    go' (Just(aa,bb))
+                        |G.null bb = Just(aa,Nothing)
+                        |otherwise = Just(aa,Just(G.head bb,G.tail bb))
+
 
 
 
@@ -168,18 +169,16 @@ sort_column = filter_scores . sortBy' (compare `on` qval)
                        in q
         f `on` g = \x y -> f (g x) (g y)
         sortBy' f xs = G.modify (Data.Vector.Algorithms.Merge.sortBy f) xs 
-        filter_scores x = V.unfoldr go x
-            where go x
-                      | V.null x = Nothing
-                      | V.length x == 1 = Just (V.head x, V.tail x)
-                      | otherwise = let (xs,xss) = V.unsafeHead x
-                                        zs = V.unsafeTail x
-                                        (ys,yss) = V.head zs
-                                        zzs = V.tail zs
-                                    in if ys < xs then Just((xs,xss), zzs)
-                                       else Just((xs,xss),zs)
-
-
+        filter_scores x = if V.null x then V.empty else V.unfoldr go (Just(V.head x,V.tail x))
+            where go Nothing = Nothing
+                  go (Just(a,b))
+                      | V.null b = Just(a,Nothing)
+                      | otherwise = let (xs,xss) = a
+                                        (ys,yss) = V.head b
+                                        zzs = V.tail b
+                                    in if ys < xs then go (Just((xs,xss),zzs))
+                                       else Just((xs,xss),Just((ys,yss),zzs))
+    
 
         
 -- Add scores for all (q,s) pairs mapping to the same q. Input must be sorted on q.
@@ -266,14 +265,11 @@ group_al'' = sort . map (\(x,ys) -> (x,sort ys)) . groups . map (\(p,q,s) -> (p,
 -}
 
 -- Use a Map p (Map q s): this is faster and uses less memory than the others.
-{-
 group_al''' :: V.Vector (Alignment s p q) -> V.Vector (Pos, V.Vector (Pos,Score))
 --group_al''' :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column
 --group_al''' xs = let y = list2vec . toList . M.unionsWith merge . map toMap . V.toList $ xs in traceShow("groupal", V.length y) y
 group_al'''= list2vec . toList . M.unionsWith merge . map toMap . V.toList
     where merge = M.unionWith max -- (+) 
-          --toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)
-          --toMap = M.fromAscList . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,M.singleton (fromIntegral q) s))
           toMap :: Alignment s p q -> M.IntMap (M.IntMap Score) -- =first coord (sec coor,sc)
           toMap = M.fromAscList . map (\(p,q,s) -> (p,M.singleton q s)) . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,(fromIntegral q), s))
           toList :: M.IntMap (M.IntMap Score) -> [(Pos, [(Pos, Score)])]
@@ -282,9 +278,8 @@ group_al'''= list2vec . toList . M.unionsWith merge . map toMap . V.toList
           list2vec = V.fromList . map (\(a,b) -> (a, V.fromList b))
 
 
--}
 
-
+{-
 group_al''' :: V.Vector (Alignment s p q) -> V.Vector (Pos, V.Vector (Pos,Score))
 group_al''' xs = let y = foldi . sortBy' (compare `on` pval) .  G.concat . G.toList . V.map toTup . V.map  toTup' $ xs in traceShow("groupal", V.length y) y
     where pval (p,_) = p
@@ -311,7 +306,7 @@ group_al''' xs = let y = foldi . sortBy' (compare `on` pval) .  G.concat . G.toL
                               | V.null vs1 && V.null vs2 = Nothing
                               | V.null vs1 = Just(V.head vs2,(V.tail vs2,vs1))
                               | otherwise = Just(V.head vs1,(V.tail vs1,vs2))
-
+-}
 
 
 
