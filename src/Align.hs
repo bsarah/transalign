@@ -17,6 +17,8 @@
 module Align (A(..),Alignment,score,collect_aligns,merge_aligns) where
 
 import qualified Data.IntMap.Strict as M
+import Data.Hashable
+import qualified Data.HashMap.Strict as H
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
 import Data.Vector.Unboxed.Deriving
@@ -96,7 +98,7 @@ merge_aligns = map merge_group . groups . filter is_not_empty --groups:: [(sid,a
 
 
 merge_group :: (Show ssid) => (ssid, V.Vector (Alignment s p q)) -> (ssid, Alignment s p q)
-merge_group (tgt,as) = let bs = group_al''' as 
+merge_group (tgt,as) = let bs = group_al4 as 
                        in (tgt , go [] bs) -- $ map (\(p,xs) -> (p,collect xs)) 
     where        
     -- this is just a regular alignment using the 
@@ -300,6 +302,27 @@ group_al''' = list2vec . toList . M.unionsWith merge . map toMap . V.toList
           toList = map fst2int . M.toAscList . M.map (map fst2int . M.toAscList)
           fst2int (f,r) = (fromIntegral f,r)
           list2vec = V.fromList . map (\(a,b) -> (a, U.fromList b))
+
+
+
+group_al4 :: V.Vector (Alignment s p q) -> V.Vector (Pos, U.Vector (Pos,Score))
+--group_al4 :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column                                                                   
+--group_al4 xs = let y = list2vec . toList . M.unionsWith merge . map toMap . V.toList $ xs in traceShow("groupal", V.length y) y              
+group_al4 = {-# SCC "group_al4_start" #-} list2vec . Data.List.sortBy (compare `on` fval) . toList . toIns . {-Data.List.sortBy (compare `on` fval) .-} conatMap toMap . V.toList
+    where toMap :: (Alignment s p q) -> [(Pos,(H.HashMap Pos Score))]
+          toMap = {-# SCC "group_al4_toMap" #-} map (\(p,q,s) -> (p,H.singleton q s)) . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,(fromIntegral q)
+, s))
+          toIns :: [(Pos,(H.HashMap Pos Score))] -> (H.HashMap Pos (H.HashMap Pos Score))
+          toIns = {-# SCC "group_al4_toIns" #-} Data.List.foldl' (\a (p,v) -> H.insertWith f p v a) H.empty
+          f = {-# SCC "group_al4_f" #-} H.unionWith max
+          toList :: (H.HashMap Pos (H.HashMap Pos Score)) -> [(Pos,[(Pos,Score)])]
+          toList = {-# SCC "group_al4_toList" #-} (H.toList . H.map (Data.List.sortBy (compare `on` fval) . H.toList))
+          fst2int (f,r) = (fromIntegral f,r)
+          list2vec = V.fromList . map (\(a,b) -> (a, U.fromList b))
+          fval (f,_) = fromIntegral f
+          f `on` g = \x y -> f (g x) (g y)
+
+
 
 {-
 a1, a2 :: Alignment Double Int Int
