@@ -16,6 +16,7 @@
 
 module Align (A(..),Alignment,score,collect_aligns,merge_aligns) where
 
+import Control.Applicative ( (<$>) )
 import qualified Data.IntMap.Strict as M
 import Data.Hashable
 import qualified Data.HashMap.Strict as H
@@ -24,16 +25,22 @@ import qualified Data.Vector.Unboxed as U
 import Data.Vector.Unboxed.Deriving
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable
-import Data.List (sort,sortBy)
+import qualified Data.Judy as J
+import Data.List (sort,sortBy,foldl',last,groupBy)
 import Data.Int (Int32)
+import Data.Word (Word32)
 import Debug.Trace
 import Control.DeepSeq
 import Control.Parallel.Strategies
 import Data.Vector.Algorithms.Merge
-
+import Control.Monad
+import System.IO.Unsafe
+import Unsafe.Coerce
+import Data.Maybe
 
 type Pos = Int32
 type Score = Float
+
 
 data A  = A {-# UNPACK #-} !Pos  {-# UNPACK #-} !Pos  {-# UNPACK #-} !Score deriving Show
 
@@ -53,6 +60,8 @@ collect_aligns sp_lu ups = do -- list monad
 
 -- A proper 'Alignment' links positions in one sequence to positions in another,
 -- assigning a score to each link.  The position links are co-linear and one-to-one.
+
+
 score :: Alignment s p q -> Score -- s
 score = G.sum . G.map (\(A _ _ s) -> s)
 
@@ -89,16 +98,16 @@ trans_align xorig yorig = G.unfoldr go (xorig,yorig) where
                             else go(x,yt)
 
 
-
 -- collect hits against the same sequence, and calculate a consensus alignment
 merge_aligns :: (Show ssid, Ord ssid, NFData ssid) => [(ssid,Alignment s p q)] -> [(ssid,Alignment s p q)]
-merge_aligns = map merge_group . groups . filter is_not_empty --groups:: [(sid,align)] -> [(sid,V.Vector align)]
+merge_aligns xs = let y = groups $ filter is_not_empty xs in traceShow("length groups: ", length y) parMap rdeepseq merge_group y 
+   -- map merge_group . groups . filter is_not_empty --groups:: [(sid,align)] -> [(sid,V.Vector align)]
   where is_not_empty = not . G.null . snd
 
 
 
 merge_group :: (Show ssid) => (ssid, V.Vector (Alignment s p q)) -> (ssid, Alignment s p q)
-merge_group (tgt,as) = let bs = group_al4 as 
+merge_group (tgt,as) = let bs = group_al5 as 
                        in (tgt , go [] bs) -- $ map (\(p,xs) -> (p,collect xs)) 
     where        
     -- this is just a regular alignment using the 
@@ -164,13 +173,13 @@ merge1 x y
                     (q,s) = G.unsafeHead ys
                     nc = G.unsafeTail ys                  
                 in
-                  if q <= q1 then (s,[(A p q s)]) : merge1 x (p,nc) 
-                  else if null ht then (ts+s,(A p q s):(A p1 q1 s1):ast) : merge1 x (p,nc) 
+                  if q <= q1 then (s,[(A p q s)]) : merge1 x (p,nc) --(s,U.singleton (A p q s)) `V.cons` merge1 x (p,nc)
+                  else if null ht then (ts+s,(A p q s):(A p1 q1 s1):ast) : merge1 x (p,nc) --(ts + s,((A p q s) `G.cons` ((A p1 q1 s1) `G.cons` ast))) `G.cons` merge1 x (p,nc)
                        else let (_,hpc) = head ht
                                 (A _ q2 _) = head hpc
                             in if (q2 < q)
-                               then merge1 ht y    
-                               else (ts+s,(A p q s):(A p1 q1 s1):ast) : merge1 x (p,nc) 
+                               then merge1 ht y         --V.singleton(q,s) `G.cons` nc))
+                               else (ts+s,(A p q s):(A p1 q1 s1):ast) : merge1 x (p,nc) --(ts + s,((A p q s) `G.cons` ((A p1 q1 s1) `G.cons` ast))) `G.cons` merge1 x (p,nc)
   
 -- sort on q-coordinate and filter so scores are increasing
 sort_column :: [(Score, [A])] -> [(Score, [A])]
@@ -305,13 +314,15 @@ group_al''' = list2vec . toList . M.unionsWith merge . map toMap . V.toList
 
 
 
+
+
+
 group_al4 :: V.Vector (Alignment s p q) -> V.Vector (Pos, U.Vector (Pos,Score))
---group_al4 :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column                                                                   
---group_al4 xs = let y = list2vec . toList . M.unionsWith merge . map toMap . V.toList $ xs in traceShow("groupal", V.length y) y              
-group_al4 = {-# SCC "group_al4_start" #-} list2vec . Data.List.sortBy (compare `on` fval) . toList . toIns . {-Data.List.sortBy (compare `on` fval) .-} conatMap toMap . V.toList
+--group_al4 :: [Alignment s p q] -> [(Pos,[(Pos,Score)])] --dp matrix, first pos = column
+--group_al4 xs = let y = list2vec . toList . M.unionsWith merge . map toMap . V.toList $ xs in traceShow("groupal", V.length y) y
+group_al4 = {-# SCC "group_al4_start" #-} list2vec . Data.List.sortBy (compare `on` fval) . toList . toIns . {-Data.List.sortBy (compare `on` fval) .-} concatMap toMap . V.toList
     where toMap :: (Alignment s p q) -> [(Pos,(H.HashMap Pos Score))]
-          toMap = {-# SCC "group_al4_toMap" #-} map (\(p,q,s) -> (p,H.singleton q s)) . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,(fromIntegral q)
-, s))
+          toMap = {-# SCC "group_al4_toMap" #-} map (\(p,q,s) -> (p,H.singleton q s)) . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,(fromIntegral q), s))
           toIns :: [(Pos,(H.HashMap Pos Score))] -> (H.HashMap Pos (H.HashMap Pos Score))
           toIns = {-# SCC "group_al4_toIns" #-} Data.List.foldl' (\a (p,v) -> H.insertWith f p v a) H.empty
           f = {-# SCC "group_al4_f" #-} H.unionWith max
@@ -321,7 +332,61 @@ group_al4 = {-# SCC "group_al4_start" #-} list2vec . Data.List.sortBy (compare `
           list2vec = V.fromList . map (\(a,b) -> (a, U.fromList b))
           fval (f,_) = fromIntegral f
           f `on` g = \x y -> f (g x) (g y)
+          
+--HashMap: innere Map: insertWith f k v map where f a b = max a b
+-- xs = map 2List . V.toList input
+--2List = sortAsc . (U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,((fromIntegral q), s)))
+-- ys = map toMap xs
+-- toMap = map (\(p,(q,s)) -> insertWith f p getQ(q,s) empty where f (q1,s1) (q2,s2) = if s1 >= s2 then (q1,s1) else (q2,s2)
+--                                                         getQ (q,s) = q
+--) list
+-- zs = unions . fromList. sort ys 
+-- list2vec 
 
+
+group_al5 :: V.Vector (Alignment s p q) -> V.Vector (Pos, U.Vector (Pos,Score))
+group_al5 = {-# SCC "group_al5_start" #-} list2vec . editlist . unsafePerformIO . (\xs -> toJ xs >>= fromJ). concat . map ( (U.toList) . (U.map) (\(A p q s) -> blubb (p,q,s)) ) . V.toList
+    where
+      list2vec :: [(Pos,[(Pos,Score)])] -> V.Vector (Pos, U.Vector (Pos,Score))
+      list2vec = {-# SCC "group_al5_list2vec" #-} V.fromList . map (\(a,b) -> (a, U.fromList b)) 
+      editlist :: [(Pos,[(Pos,Score)])] -> [(Pos,[(Pos,Score)])]
+      editlist [] = []
+      editlist [x] = [x]
+      editlist zs = {-# SCC "group_al5_editlist" #-}  map (\g -> (fst $ head g, concatMap snd g)) $ groupBy  ((==) `on` fst) zs
+      f `on` g = \x y -> f (g x) (g y)
+-- if xs == ys then editlist ((xs,xss++yss):zs)
+  --                                    else (xs,xss):(editlist ((ys,yss):zs))
+      blubb :: (Pos,Pos,Score) -> (J.Key,Word32)
+      blubb (p,q,s) = {-# SCC "group_al5_blubb" #-} ( (fromIntegral $ p `asTypeOf` p)*ck1 + (fromIntegral q), unsafeCoerce $ s )
+
+ck1 :: Num a => a
+ck1 = 2 ^ 32
+
+toJ xs = {-# SCC "toJ_start" #-} do
+  j <- J.new :: IO (J.JudyL Word32)
+  mapM_ (\(k,s)-> do --k <- (pq)
+           v <- J.lookup k j
+           case v of 
+             Nothing -> J.insert k s j
+             Just vv -> J.insert k (max s vv) j
+        ) xs
+  return j
+
+fromJ js = {-# SCC "fromJ_start" #-} do
+  ks <- J.keys js
+  -- es <- J.elems js
+  es <- catMaybes <$> sequence [ J.lookup k js | k <- ks ]
+  --mapM_ print ks
+  --mapM_ print es
+  --deepseq (ks,es) $ mapM_ print $ zip ks es
+  return $ format ks es
+      where
+        format :: [J.Key] -> [Word32] -> [(Pos,[(Pos,Score)])] 
+        format ks es = {-# SCC "fromJ_fromat" #-} map(\(k,v) -> let (p,q) = (convertback $ fromIntegral k)
+                                                                   in (fromIntegral p,[(fromIntegral q, unsafeCoerce v ) ]) 
+                                                        ) $ zip ks es
+        convertback :: Int -> (Int,Int)
+        convertback k = {-# SCC "fromJ_convertback" #-} divMod k ck1
 
 
 {-
