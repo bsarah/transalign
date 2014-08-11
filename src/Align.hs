@@ -37,10 +37,11 @@ import Control.Monad
 import System.IO.Unsafe
 import Unsafe.Coerce
 import Data.Maybe
+import GHC.Conc.Sync
+import System.Mem (performGC)
 
 type Pos = Int32
 type Score = Float
-
 
 data A  = A {-# UNPACK #-} !Pos  {-# UNPACK #-} !Pos  {-# UNPACK #-} !Score deriving Show
 
@@ -98,13 +99,25 @@ trans_align xorig yorig = G.unfoldr go (xorig,yorig) where
                             else go(x,yt)
 
 
+
+{-
+trans_align x y 
+  | G.null x || G.null y = G.empty
+  | otherwise = let (A xp xq xs) = G.head x
+                    (A yq yr ys) = G.head y
+                    xt = G.tail x
+                    yt = G.tail y
+                in
+                 if (xq == yq) then (A xp yr (min xs ys))  `G.cons` trans_align xt yt
+                 else 
+                   if (xq < yq) then trans_align xt y
+                   else {-xq > yq =-} trans_align x yt
+
+-}
 -- collect hits against the same sequence, and calculate a consensus alignment
 merge_aligns :: (Show ssid, Ord ssid, NFData ssid) => [(ssid,Alignment s p q)] -> [(ssid,Alignment s p q)]
-merge_aligns xs = let y = groups $ filter is_not_empty xs in traceShow("length groups: ", length y) parMap rdeepseq merge_group y 
-   -- map merge_group . groups . filter is_not_empty --groups:: [(sid,align)] -> [(sid,V.Vector align)]
+merge_aligns xs = {-# SCC "merge_aligns_start" #-} let y = groups $ filter is_not_empty xs in traceShow("length groups: ", length y) $ withStrategy(parBuffer (1*numCapabilities) rdeepseq) $ map merge_group y 
   where is_not_empty = not . G.null . snd
-
-
 
 merge_group :: (Show ssid) => (ssid, V.Vector (Alignment s p q)) -> (ssid, Alignment s p q)
 merge_group (tgt,as) = let bs = group_al5 as 
@@ -345,7 +358,7 @@ group_al4 = {-# SCC "group_al4_start" #-} list2vec . Data.List.sortBy (compare `
 
 
 group_al5 :: V.Vector (Alignment s p q) -> V.Vector (Pos, U.Vector (Pos,Score))
-group_al5 = {-# SCC "group_al5_start" #-} list2vec . editlist . unsafePerformIO . (\xs -> toJ xs >>= fromJ). concat . map ( (U.toList) . (U.map) (\(A p q s) -> blubb (p,q,s)) ) . V.toList
+group_al5 = {-# SCC "group_al5_start" #-} list2vec . editlist . (unsafePerformIO . withJ) . concat . map ( (U.toList) . (U.map) (\(A p q s) -> blubb (p,q,s)) ) . V.toList
     where
       list2vec :: [(Pos,[(Pos,Score)])] -> V.Vector (Pos, U.Vector (Pos,Score))
       list2vec = {-# SCC "group_al5_list2vec" #-} V.fromList . map (\(a,b) -> (a, U.fromList b)) 
@@ -362,7 +375,33 @@ group_al5 = {-# SCC "group_al5_start" #-} list2vec . editlist . unsafePerformIO 
 ck1 :: Num a => a
 ck1 = 2 ^ 32
 
+withJ :: [(J.Key,Word32)] -> IO [(Pos, [(Pos,Score)])]
+withJ xs = do
+    performGC
+    j <- J.new :: IO (J.JudyL Word32)
+    mapM_ (\(k,s)-> do 
+             v <- J.lookup k j
+             case v of 
+               Nothing -> J.insert k s j
+               Just vv -> J.insert k (max s vv) j
+          ) xs
+    ks <- J.keys j
+    es <- catMaybes <$> sequence [ J.lookup k j | k <- ks ]
+    let zs = format ks es
+    --deepseq zs `pseq` mapM_ (\k -> J.delete k j) ks
+    return zs
+        where
+          format :: [J.Key] -> [Word32] -> [(Pos,[(Pos,Score)])] 
+          format ks es = {-# SCC "fromJ_fromat" #-} map(\(k,v) -> let (p,q) = (convertback $ fromIntegral k)
+                                                                  in (fromIntegral p,[(fromIntegral q, unsafeCoerce v ) ]) 
+                                                       ) $ zip ks es
+          convertback :: Int -> (Int,Int)
+          convertback k = {-# SCC "fromJ_convertback" #-} quotRem k ck1 --use quotRem
+
+
+
 toJ xs = {-# SCC "toJ_start" #-} do
+  performGC
   j <- J.new :: IO (J.JudyL Word32)
   mapM_ (\(k,s)-> do --k <- (pq)
            v <- J.lookup k j
@@ -386,7 +425,55 @@ fromJ js = {-# SCC "fromJ_start" #-} do
                                                                    in (fromIntegral p,[(fromIntegral q, unsafeCoerce v ) ]) 
                                                         ) $ zip ks es
         convertback :: Int -> (Int,Int)
-        convertback k = {-# SCC "fromJ_convertback" #-} divMod k ck1
+        convertback k = {-# SCC "fromJ_convertback" #-} quotRem k ck1 --use quotRem
+{-  xs <- map ((U.toList) . (U.map) (\(A p q s) -> (fromIntegral p,(fromIntegral q), s*1000))) ls
+  j <- J.new :: IO (J.JudyL Int)
+  Data.List.foldl' (\a (p,q,s)-> let k = p*2^32+q
+                                     v = J.lookup k a
+                                 in case v of 
+                                      Nothing -> J.insert k s a
+                                      Just vv -> J.insert k (max s vv) a
+                   ) j xs
+  ks <- J.keys j
+  yss <- Data.List.foldl' (\ys k -> let (p',q') = divMod k 2^32
+                                        (p,q) = (fromIntegral p',fromIntegral q')
+                                        Just v = J.lookup k j
+                                        s = v/1000.0
+                                    in
+                                      case length ys of
+                                        0 -> (p,[(q,s)]):ys
+                                        otherwise -> let (p1,zs) = head ys in if p1 == p then (q,s):zs else (p,[(q,s)]):ys
+                          ) [] ks
+  res <- V.fromList . map (\(a,b) -> (a, U.fromList b)) yss
+  return res
+ 
+
+-}
+
+{- judy:
+
+do
+xs <- toList ...
+j <- J.new :: IO (J.JudyL Int) -- does float also work? or convert score to int, thus score * 1000 OR score to JE Int?
+Data.List.foldl' (\a (p,q,s)-> let k = p*2^32+q
+                                       v = lookup k a
+                                   in case v of 
+                                        Nothing -> insert k s a
+                                        Just vv -> insert k (max s vv)) j xs
+
+ks <- keys j
+ys <- []
+Data.List.foldl' (\k -> let (p,q) = divMod k 2^32
+                    Just v = lookup k j
+        in
+          case length ys of
+            0 -> ys ++ (p,[(q,v)])
+        otherwise -> let (p1,zs) = last ys in if p1 == p then zs ++ [(q,v)] else ys ++ (p,[(q,v)])
+) k ks
+res <- list2vec ys
+return
+
+-}
 
 
 {-
