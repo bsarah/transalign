@@ -39,6 +39,8 @@ import Unsafe.Coerce
 import Data.Maybe
 import GHC.Conc.Sync
 import System.Mem (performGC)
+import Control.Seq as CS
+
 
 type Pos = Int32
 type Score = Float
@@ -95,7 +97,7 @@ trans_align xorig yorig = G.force $ G.unfoldr go (xorig,yorig) where
 -- | collect hits against the same sequence, and calculate a consensus alignment
 merge_aligns :: (Show ssid, Ord ssid, NFData ssid) => [(ssid,Alignment s p q)] -> [(ssid,Alignment s p q)]
 merge_aligns xs =  let y = groups $ filter is_not_empty xs
-                   in parMap rdeepseq merge_group y
+                   in map merge_group y `CS.using` CS.seqList CS.rdeepseq
     where is_not_empty = not . G.null . snd 
 
 
