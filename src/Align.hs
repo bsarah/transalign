@@ -11,7 +11,7 @@
 {-# Language TemplateHaskell #-}
 {-# Language FlexibleInstances #-}
 -- {-# Language UndecidableInstances #-}
--- {-# Language FlexibleContexts #-}
+{-# Language FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 
 module Align (A(..),Alignment,score,collect_aligns,merge_aligns) where
