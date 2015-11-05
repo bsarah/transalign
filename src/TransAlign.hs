@@ -11,6 +11,7 @@ import Control.Monad (when)
 import System.Exit
 import qualified Data.ByteString.Lazy.Char8 as B
 import Data.List (sortBy)
+import Control.Monad (forM_)
 
 import Align (collect_aligns,merge_aligns)
 import Blast (BlastAlignment, BlastAlignData, readAlignments)
@@ -64,7 +65,8 @@ process_align output spdir (q, hits) = do
   sphits <- M.fromList `fmap` mapM (\h -> do 
                                        ts <- readAlignmentCache (spdir++".d") (B.unpack h)
                                        return (h,ts)) hitnames
-            
+--  forM_ (M.assocs sphits) $ \ (h,ts) -> do
+--    print (h,length ts)
   let as = merge_aligns $ collect_aligns (mlu sphits) hits
       mlu m k = maybe [] id $ M.lookup k m
   output q $ reverse $ sortBy (compare `on` fst') $ map add_score as 

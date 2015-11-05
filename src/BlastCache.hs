@@ -1,4 +1,7 @@
- -- Convert BlastXML to a directory with one file per query sequence
+{-# Language OverloadedStrings #-}
+{-# Language DoAndIfThenElse #-}
+
+-- Convert BlastXML to a directory with one file per query sequence
 module BlastCache where
 
 import Data.Binary
@@ -14,6 +17,8 @@ import Control.DeepSeq
 import Control.Arrow (second)
 import Data.Hashable
 import Text.Printf
+import Debug.Trace
+import System.IO (stderr,hPutStrLn)
 
 import Blast (readAlignments, BlastAlignment)
 import Align (A(..))
@@ -43,14 +48,22 @@ writeAlignmentCache dir (qsid',ts) = do
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
 readAlignmentCache dir qsid = do
   let dnew = printf "%03d" $ hash qsid `mod` 1000
-  dfe <- doesFileExist (dir++"/"++dnew++"/"++qsid)
+  dfeNew <- doesFileExist (dir++"/"++dnew++"/"++qsid)
+  dfeOld <- doesFileExist (dir++"/"++qsid)
 --  print (dir,dnew,qsid,dfe)
-  x <- if dfe then B.readFile (dir++"/"++dnew++"/"++qsid) else B.readFile (dir++"/"++qsid)
+  xNew <- {- traceShow(dir,dnew,qsid,dfe) $ -} if dfeNew then B.readFile (dir++"/"++dnew++"/"++qsid) else return B.empty
+  xOld <- if dfeOld then B.readFile (dir++"/"++qsid) else return B.empty
+--B.readFile (dir++"/"++qsid)
 --  x <- B.readFile (dir++"/"++qsid)
   let unconvert (name,s,pqs) = let nm = B.copy name
                                    v = U.fromListN (length pqs) $ map (\(p,q) -> (A p q s)) pqs
                                in nm `seq` v `seq` (nm, v)
-  return $!! map unconvert $ decode $ x
+  case (B.null xNew , B.null xOld) of
+    (True,True) -> do hPutStrLn stderr $ "ERROR: cache file not found: " ++ dir ++ "/" ++ "(" ++ dnew ++ ")" ++ qsid
+                      return []
+    (True,_   ) -> return $!! map unconvert $ decode $ xOld
+    (_   ,True) -> return $!! map unconvert $ decode $ xNew
+    (_   ,_   ) -> return []
 
 {-
 instance NFData B.ByteString where
