@@ -16,7 +16,7 @@ Executable transalign
    Other-modules:  Align, Blast, BlastCache, Options, Output
    Hs-Source-Dirs: src
    Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3
-   Ghc-Options:  -rtsopts -threaded -Odph -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100 -feager-blackholing
+   Ghc-Options:  -rtsopts -threaded -O2 -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100
 
 Executable blastextract
    Main-Is:        BlastExtract.hs
@@ -32,9 +32,10 @@ Executable showcache
    Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring >= 0.9, binary, directory, filepath, deepseq, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3
    Ghc-Options:  -rtsopts -threaded -feager-blackholing
 
-Executable transalign_prof
-   Main-Is:        TransAlign.hs
-   Other-modules:  Align, Blast, BlastCache, Output, Options
-   Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3
-   Ghc-Options:  -prof -fprof-auto-top -rtsopts -threaded -rtsopts -Odph -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100 -feager-blackholing
+--Executable transalign_prof
+--   Main-Is:        TransAlign.hs
+--   Other-modules:  Align, Blast, BlastCache, Output, Options
+--   Hs-Source-Dirs: src
+--   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3
+--   Ghc-Options:  -prof -fprof-auto-top -rtsopts -threaded -rtsopts -Odph -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100 -feager-blackholing
+

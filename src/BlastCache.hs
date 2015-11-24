@@ -46,7 +46,7 @@ writeAlignmentCache dir (qsid',ts) = do
 
 -- | Given the directory and a query sequence, extract the alignments
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
-readAlignmentCache dir qsid = do
+readAlignmentCache dir qsid = {-# SCC "BC.rAC" #-} do
   let dnew = printf "%03d" $ hash qsid `mod` 1000
   dfeNew <- doesFileExist (dir++"/"++dnew++"/"++qsid)
   dfeOld <- doesFileExist (dir++"/"++qsid)

@@ -1,4 +1,5 @@
 {-# Language DoAndIfThenElse #-}
+{-# Language TupleSections #-}
 
 module Main where
 
@@ -7,14 +8,19 @@ import Prelude hiding (log)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import System.Directory (doesDirectoryExist,doesFileExist,getDirectoryContents)
-import Control.Monad (when)
+import Control.Monad (when,zipWithM,zipWithM_,forM)
 import System.Exit
 import qualified Data.ByteString.Lazy.Char8 as B
-import Data.List (sortBy, groupBy)
+import Data.List (sortBy, groupBy, sort, nub)
 import Control.Monad (forM_)
 import Data.Ord
 import System.Mem (performGC)
 import Control.Parallel.Strategies
+import System.IO.Unsafe
+import qualified Data.Vector.Generic as VG
+import Text.Printf
+import GHC.Conc
+import GHC.Exts (Down(..))
 
 import Align (collect_aligns,merge_aligns)
 import Blast (BlastAlignment, BlastAlignData, readAlignments)
@@ -37,7 +43,6 @@ main = do
     inputs <- if (not $ null $ extract opts) 
               then return (extract opts) 
               else filter (\x -> x /= "." && x /= "..") `fmap` getDirectoryContents (up++".d")
-  
     flip mapM_ inputs $ \i -> do  -- forM_
       myhits <- readAlignmentCache (up++".d") i
       process_align output sp (B.pack i,myhits)
@@ -65,30 +70,49 @@ maybeBuildCache (warn,log) sp = do
 -- process_align :: FilePath -> BlastAlignment -> IO ()
 process_align :: (B.ByteString -> [(Float,B.ByteString,BlastAlignData)] -> IO ()) -> String -> (B.ByteString, [BlastAlignment]) -> IO ()
 process_align output spdir (q, hits) = do
-  let hits' = groupBy ((==) `on` fst) . sortBy (comparing fst) $ hits
-  --print $ length hits
-  --print $ length hits'
-  -- foreach query, collect all targets' hits from the cache
-  -- let hitnames = unique $ map fst hits
-  sphits <- mapM ( \ hs@((hitname,_):_) -> do
-              --print "before gc"
-              --print $ length hs
-              performGC
-              --print "after gc"
-              ts <- readAlignmentCache (spdir++".d") (B.unpack hitname)
-              --print "after rac"
-              let as = parMap rdeepseq id $ collect_aligns (const ts) hs
-              --print "after collect"
-              return as) hits'
+  let hits' = groupBy ((==) `on` fst) . sortBy (comparing fst) $ hits -- take 200 $ hits
+  let lhits' = length hits'
+  let lhits  = length hits
+  -- foreach query, collect all target names for streamling hit building
+  tgthits <- (M.fromListWith S.union . concat) <$>
+    zipWithM (\ kkk hs@((hitname,_):_) -> do
+      ts <- readAlignmentCache (spdir++".d") (B.unpack hitname)
+      let ttt = unique $ map fst ts
+      --let as = collect_aligns (const ts) hs
+      --let ttt = unique $ map fst as
+      --when (ttt /= unique (map fst ts)) $ error "bang"
+      return (map (,S.singleton hitname) ttt) ) [1 :: Int .. ] hits'
+  let ltgthits = M.size tgthits
+  -- for each target, run the algorithm
+  let tgthitlist = sortBy (compare `on` (Down . S.size . snd)) $ M.toList tgthits
+  tgtgroup <- forM (zip [1 :: Int ..] tgthitlist) $ \(ttt, (tgt,hitsources)) -> do
+    let lhss = S.size hitsources
+    -- foreach query, collect all targets' hits from the cache
+    -- let hitnames = unique $ map fst hits
+    sphits <- zipWithM ( \ kkk hs@((hitname,_):_) -> unsafeInterleaveIO $ do
+                if (S.member hitname hitsources)
+                then do
+                  printf "# %3d / %3d tgt: %s %5d / %5d [%5d] src: %s\n"
+                    ttt ltgthits
+                    (B.unpack tgt)
+                    kkk lhits' lhss
+                    (B.unpack hitname)
+                  ts <- readAlignmentCache (spdir++".d") (B.unpack hitname)
+                  let as = filter ((==tgt) . fst) $ collect_aligns (const ts) hs
+                  return (as `using` evalList rdeepseq)
+                else do
+                  return []
+              ) [1 :: Int ..] hits'
+    return $ merge_aligns $ concat sphits
     
-  --  sphits <- M.fromList `fmap` mapM (\h -> do 
-  --                                     ts <- readAlignmentCache (spdir++".d") (B.unpack h)
-  --                                     return (h,ts)) [hitname]
---  forM_ (M.assocs sphits) $ \ (h,ts) -> do
---    print (h,length ts)
---  let as = merge_aligns $ collect_aligns (mlu sphits) hits
---      mlu m k = maybe [] id $ M.lookup k m
-  output q $ reverse $ sortBy (compare `on` fst') $ map add_score $ merge_aligns $ concat sphits 
+  output q $ reverse
+           $ sortBy (compare `on` fst')
+           $ map add_score
+           $ concat
+           $ (tgtgroup `using` {- parList rseq) -} parBuffer (2 * numCapabilities) rseq)
+--           $ merge_aligns
+--           $ concat
+--           $ tgtgroup
     where fst' (x,_,_) = x
           f `on` g = \x y -> f (g x) (g y)
   

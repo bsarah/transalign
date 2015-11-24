@@ -13,6 +13,7 @@
 -- {-# Language UndecidableInstances #-}
 {-# Language FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
+{-# Language BangPatterns #-}
 
 module Align (A(..),Alignment,score,collect_aligns,merge_aligns) where
 
@@ -39,7 +40,7 @@ import Unsafe.Coerce
 import Data.Maybe
 import GHC.Conc.Sync
 import System.Mem (performGC)
-import Control.Seq as CS
+import qualified Control.Seq as CS
 
 
 type Pos = Int32
@@ -62,10 +63,11 @@ type Alignment score pos1 pos2 = U.Vector A
 
 -- | get sequences from target which fit to query sequence 
 collect_aligns :: (usid -> [(ssid, Alignment s q r)]) -> [(usid, Alignment s p q)] -> [(ssid,Alignment s p r)]
-collect_aligns sp_lu ups = do -- list monad
-  (uhit,ualign) <- ups
-  (shit,salign) <- sp_lu uhit
-  return (shit,trans_align ualign salign)
+collect_aligns sp_lu ups = {-# SCC "A.c_a" #-} xs -- `using` parList (evalTuple2 r0 rdeepseq)
+  where xs = do -- list monad
+                (uhit,ualign) <- ups
+                (shit,salign) <- sp_lu uhit
+                return (shit,trans_align ualign salign)
 
 
 score :: Alignment s p q -> Score -- s
@@ -80,7 +82,7 @@ invert = G.map (\(A x y s) -> (A y x s))
 --   form the transitive alignment.  Note that if the alignments have 
 --   nothing in common, this may produce an empty alignment.
 trans_align :: Alignment s p q -> Alignment s q r -> Alignment s p r
-trans_align xorig yorig = G.force $ G.unfoldr go (xorig,yorig) where
+trans_align !xorig !yorig = {-# SCC "A.t_a" #-} {- G.force $ -} G.unfoldr go (xorig,yorig) where
     go (x,y) 
         | G.null x || G.null y = Nothing
         | otherwise = let (A xp xq xs) = G.unsafeHead x
@@ -96,9 +98,10 @@ trans_align xorig yorig = G.force $ G.unfoldr go (xorig,yorig) where
 
 -- | collect hits against the same sequence, and calculate a consensus alignment
 merge_aligns :: (Show ssid, Ord ssid, NFData ssid) => [(ssid,Alignment s p q)] -> [(ssid,Alignment s p q)]
-merge_aligns xs =  let y = groups $ filter is_not_empty xs
-                   in map merge_group y `CS.using` CS.seqList CS.rdeepseq
-    where is_not_empty = not . G.null . snd 
+merge_aligns xs = {-# SCC "A.m_a" #-}
+  let y            = groups $ filter is_not_empty xs
+      is_not_empty = not . G.null . snd 
+  in map merge_group y -- `CS.using` CS.seqList CS.rdeepseq
 
 
 -- | Use group_al, merge1 and sort_column to get a list/vector of possible alignments including

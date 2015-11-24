@@ -47,15 +47,15 @@ hit2align p h = [(sname h, a) | a <- map (match2align p) $ matches h]
 -- Warning: blastx-specific!
 -- BlastMatch has two attributes qseq and hseq :: ByteString, additionally q_from,q_to,h_from,h_to as Int 
 match2align :: BlastProg -> BlastMatch -> BlastAlignData
-match2align prog m = G.map add_score $ go qstart hstart (qseq m) (hseq m)
+match2align prog m = G.fromList . map add_score $ go qstart hstart (qseq m) (hseq m)
   where (hstep,qstep) = case prog of BlastX -> (1,3) -- blastx? (1,1) else
                                      BlastP -> (1,1)
                                      -- etc.
         go qi hi qsq hsq = case (B.uncons qsq,B.uncons hsq) of
           (Just ('-',qs),Just (_h,hs)) -> go qi (hi+hstep) qs hs
           (Just (_q,qs),Just ('-',hs)) -> go (qi+qstep) hi qs hs
-          (Just (_q,qs),Just (_h,hs))   -> (qi,hi) `G.cons` go (qi+qstep) (hi+hstep) qs hs
-          (Nothing,Nothing)           -> G.empty
+          (Just (_q,qs),Just (_h,hs))   -> (qi,hi) : go (qi+qstep) (hi+hstep) qs hs
+          (Nothing,Nothing)           -> []
           _ -> error "Case closed! just to shut up the type checker"
         qstart = case aux m of Frame Minus _ -> negate (q_to m)
                                _ -> q_from m
@@ -95,7 +95,7 @@ getAlignments res = map rec2align . results $ res
 
 -- | Read a set of alignments from a BlastXML file
 readAlignments :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
-readAlignments f = getAlignments `fmap` readXML f
+readAlignments f = {-# SCC "B.rA" #-} getAlignments `fmap` readXML f
 
 -- | Read alignments, and return a Map for query to set of alignments
 readAlignmentMap :: FilePath -> IO BlastMap
