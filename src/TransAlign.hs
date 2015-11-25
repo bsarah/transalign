@@ -85,7 +85,7 @@ process_align output spdir (q, hits) = do
   let ltgthits = M.size tgthits
   -- for each target, run the algorithm
   let tgthitlist = sortBy (compare `on` (Down . S.size . snd)) $ M.toList tgthits
-  tgtgroup <- forM (zip [1 :: Int ..] tgthitlist) $ \(ttt, (tgt,hitsources)) -> do
+  tgtgroup <- forM (zip [1 :: Int ..] tgthitlist) $ \(lll, (tgt,hitsources)) -> do
     let lhss = S.size hitsources
     -- foreach query, collect all targets' hits from the cache
     -- let hitnames = unique $ map fst hits
@@ -93,7 +93,7 @@ process_align output spdir (q, hits) = do
                 if (S.member hitname hitsources)
                 then do
                   printf "# %3d / %3d tgt: %s %5d / %5d [%5d] src: %s\n"
-                    ttt ltgthits
+                    lll ltgthits
                     (B.unpack tgt)
                     kkk lhits' lhss
                     (B.unpack hitname)
