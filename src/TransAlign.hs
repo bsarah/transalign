@@ -1,5 +1,6 @@
-{-# Language DoAndIfThenElse #-}
-{-# Language TupleSections #-}
+{-# Language DoAndIfThenElse  #-}
+{-# Language TupleSections    #-}
+{-# Language FlexibleContexts #-}
 
 module Main where
 
@@ -21,8 +22,9 @@ import qualified Data.Vector.Generic as VG
 import Text.Printf
 import GHC.Conc
 import GHC.Exts (Down(..))
+import GHC.Float (double2Float)
 
-import Align (collect_aligns,merge_aligns)
+import Align (collect_aligns,merge_aligns,A(..))
 import Blast (BlastAlignment, BlastAlignData, readAlignments)
 import BlastCache (readAlignmentCache, buildCache)
 import Options (getArgs, Opts(..))
@@ -45,12 +47,12 @@ main = do
               else filter (\x -> x /= "." && x /= "..") `fmap` getDirectoryContents (up++".d")
     flip mapM_ inputs $ \i -> do  -- forM_
       myhits <- readAlignmentCache (up++".d") i
-      process_align output sp (B.pack i,myhits)
+      process_align (blastfltr opts) output sp (B.pack i,myhits)
   else do
     --print up
     myhits <- readAlignments up
     --print $ length myhits
-    mapM_ (process_align output sp) myhits
+    mapM_ (process_align (blastfltr opts) output sp) myhits
 
 maybeBuildCache :: (String -> IO (),String -> IO ()) -> String -> IO ()
 maybeBuildCache (warn,log) sp = do
@@ -68,9 +70,9 @@ maybeBuildCache (warn,log) sp = do
         exitWith (ExitFailure 99)
 
 -- process_align :: FilePath -> BlastAlignment -> IO ()
-process_align :: (B.ByteString -> [(Float,B.ByteString,BlastAlignData)] -> IO ()) -> String -> (B.ByteString, [BlastAlignment]) -> IO ()
-process_align output spdir (q, hits) = do
-  let hits' = groupBy ((==) `on` fst) . sortBy (comparing fst) $ hits -- take 200 $ hits
+process_align :: Maybe Double -> (B.ByteString -> [(Float,B.ByteString,BlastAlignData)] -> IO ()) -> String -> (B.ByteString, [BlastAlignment]) -> IO ()
+process_align bfltr output spdir (q, hits) = do
+  let hits' = groupBy ((==) `on` fst) . sortBy (comparing fst) $ hits
   let lhits' = length hits'
   let lhits  = length hits
   -- foreach query, collect all target names for streamling hit building
@@ -78,13 +80,10 @@ process_align output spdir (q, hits) = do
     zipWithM (\ kkk hs@((hitname,_):_) -> do
       ts <- readAlignmentCache (spdir++".d") (B.unpack hitname)
       let ttt = unique $ map fst ts
-      --let as = collect_aligns (const ts) hs
-      --let ttt = unique $ map fst as
-      --when (ttt /= unique (map fst ts)) $ error "bang"
       return (map (,S.singleton hitname) ttt) ) [1 :: Int .. ] hits'
   let ltgthits = M.size tgthits
   -- for each target, run the algorithm
-  let tgthitlist = sortBy (compare `on` (Down . S.size . snd)) $ M.toList tgthits
+  let tgthitlist = take 2 $ sortBy (compare `on` (Down . S.size . snd)) $ M.toList tgthits
   tgtgroup <- forM (zip [1 :: Int ..] tgthitlist) $ \(lll, (tgt,hitsources)) -> do
     let lhss = S.size hitsources
     -- foreach query, collect all targets' hits from the cache
@@ -97,19 +96,22 @@ process_align output spdir (q, hits) = do
                     (B.unpack tgt)
                     kkk lhits' lhss
                     (B.unpack hitname)
-                  ts <- readAlignmentCache (spdir++".d") (B.unpack hitname)
-                  let as = filter ((==tgt) . fst) $ collect_aligns (const ts) hs
-                  return (as `using` evalList rdeepseq)
+                  ts' <- filterAlignments (case bfltr of Just fltr -> if lhss>100 then Just (double2Float fltr) else Nothing
+                                                         _         -> Nothing
+                                          ) <$> readAlignmentCache (spdir++".d") (B.unpack hitname)
+                  let ts = filter ((==tgt) . fst) ts'
+                  let as = {- seq (ts `using` parBuffer numCapabilities rdeepseq) $ -} collect_aligns (const ts) hs
+                  return as
                 else do
                   return []
               ) [1 :: Int ..] hits'
-    return $ merge_aligns $ concat sphits
+    return $ merge_aligns $ concat sphits -- (sphits `using` parBuffer numCapabilities rdeepseq)
     
   output q $ reverse
            $ sortBy (compare `on` fst')
            $ map add_score
            $ concat
-           $ (tgtgroup `using` {- parList rseq) -} parBuffer (2 * numCapabilities) rseq)
+           $ tgtgroup -- (tgtgroup `using` {- parList rseq) -} parBuffer (2 * numCapabilities) rseq)
 --           $ merge_aligns
 --           $ concat
 --           $ tgtgroup
@@ -118,4 +120,9 @@ process_align output spdir (q, hits) = do
   
 unique :: Ord a => [a] -> [a]
 unique = S.toList . S.fromList
+
+filterAlignments :: Maybe Float -> [BlastAlignment] -> [BlastAlignment]
+filterAlignments Nothing = id
+filterAlignments (Just f) = map go
+  where go (s,d) = (s, VG.filter (\(A x y z) -> z >= f) d)
 

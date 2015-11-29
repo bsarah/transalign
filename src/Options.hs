@@ -12,6 +12,7 @@ data Opts = Opts
             , outfile :: Maybe FilePath
             , extract :: [String]
             , cite :: Bool
+            , blastfltr :: Maybe Double
             } deriving (Data,Typeable, Show, Eq)
 
 optdef :: Ann
@@ -26,6 +27,7 @@ opts = Opts
   , blastfiles = [] &= args &= typ "BLASTXML FILES"
   , cache     = False &= help "generate alignment cache for initial alignment" &= name "c"
   , cite      = False &= help "output citation information"
+  , blastfltr = Nothing
   } 
   &= verbosity
   &= summary "transalign v0.1, ©2012 Ketil Malde"

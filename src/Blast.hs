@@ -19,6 +19,7 @@ import qualified Data.Vector.Unboxed as U
 import Data.Vector.Unboxed.Deriving
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable
+import Debug.Trace
 
 
 import Data.Int

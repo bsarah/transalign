@@ -45,6 +45,9 @@ writeAlignmentCache dir (qsid',ts) = do
 
 
 -- | Given the directory and a query sequence, extract the alignments
+--
+-- CHzS: made more lazy to reduce total memory consumption!
+
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
 readAlignmentCache dir qsid = {-# SCC "BC.rAC" #-} do
   let dnew = printf "%03d" $ hash qsid `mod` 1000
@@ -56,13 +59,13 @@ readAlignmentCache dir qsid = {-# SCC "BC.rAC" #-} do
 --B.readFile (dir++"/"++qsid)
 --  x <- B.readFile (dir++"/"++qsid)
   let unconvert (name,s,pqs) = let nm = B.copy name
-                                   v = U.fromListN (length pqs) $ map (\(p,q) -> (A p q s)) pqs
-                               in nm `seq` v `seq` (nm, v)
+                                   v = G.force $ U.fromList {- N (length pqs) -} $ map (\(p,q) -> (A p q s)) pqs
+                               in (nm,v) -- nm `seq` v `seq` (nm, v)
   case (B.null xNew , B.null xOld) of
     (True,True) -> do hPutStrLn stderr $ "ERROR: cache file not found: " ++ dir ++ "/" ++ "(" ++ dnew ++ ")" ++ qsid
                       return []
-    (True,_   ) -> return $!! map unconvert $ decode $ xOld
-    (_   ,True) -> return $!! map unconvert $ decode $ xNew
+    (True,_   ) -> return $ map unconvert $ decode $ xOld
+    (_   ,True) -> return $ map unconvert $ decode $ xNew
     (_   ,_   ) -> return []
 
 {-
