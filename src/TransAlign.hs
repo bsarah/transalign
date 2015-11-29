@@ -83,7 +83,7 @@ process_align bfltr output spdir (q, hits) = do
       return (map (,S.singleton hitname) ttt) ) [1 :: Int .. ] hits'
   let ltgthits = M.size tgthits
   -- for each target, run the algorithm
-  let tgthitlist = take 2 $ sortBy (compare `on` (Down . S.size . snd)) $ M.toList tgthits
+  let tgthitlist = {- take 2 $ -} sortBy (compare `on` (Down . S.size . snd)) $ M.toList tgthits
   tgtgroup <- forM (zip [1 :: Int ..] tgthitlist) $ \(lll, (tgt,hitsources)) -> do
     let lhss = S.size hitsources
     -- foreach query, collect all targets' hits from the cache
