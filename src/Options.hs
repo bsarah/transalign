@@ -13,6 +13,7 @@ data Opts = Opts
             , extract :: [String]
             , cite :: Bool
             , blastfltr :: Maybe Double
+            , debug :: Bool
             } deriving (Data,Typeable, Show, Eq)
 
 optdef :: Ann
@@ -28,6 +29,7 @@ opts = Opts
   , cache     = False &= help "generate alignment cache for initial alignment" &= name "c"
   , cite      = False &= help "output citation information"
   , blastfltr = Nothing
+  , debug     = False
   } 
   &= verbosity
   &= summary "transalign v0.1, ©2012 Ketil Malde"

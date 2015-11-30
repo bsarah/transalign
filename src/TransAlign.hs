@@ -47,12 +47,12 @@ main = do
               else filter (\x -> x /= "." && x /= "..") `fmap` getDirectoryContents (up++".d")
     flip mapM_ inputs $ \i -> do  -- forM_
       myhits <- readAlignmentCache (up++".d") i
-      process_align (blastfltr opts) output sp (B.pack i,myhits)
+      process_align (debug opts) (blastfltr opts) output sp (B.pack i,myhits)
   else do
     --print up
     myhits <- readAlignments up
     --print $ length myhits
-    mapM_ (process_align (blastfltr opts) output sp) myhits
+    mapM_ (process_align (debug opts) (blastfltr opts) output sp) myhits
 
 maybeBuildCache :: (String -> IO (),String -> IO ()) -> String -> IO ()
 maybeBuildCache (warn,log) sp = do
@@ -70,8 +70,8 @@ maybeBuildCache (warn,log) sp = do
         exitWith (ExitFailure 99)
 
 -- process_align :: FilePath -> BlastAlignment -> IO ()
-process_align :: Maybe Double -> (B.ByteString -> [(Float,B.ByteString,BlastAlignData)] -> IO ()) -> String -> (B.ByteString, [BlastAlignment]) -> IO ()
-process_align bfltr output spdir (q, hits) = do
+process_align :: Bool -> Maybe Double -> (B.ByteString -> [(Float,B.ByteString,BlastAlignData)] -> IO ()) -> String -> (B.ByteString, [BlastAlignment]) -> IO ()
+process_align dbg bfltr output spdir (q, hits) = do
   let hits' = groupBy ((==) `on` fst) . sortBy (comparing fst) $ hits
   let lhits' = length hits'
   let lhits  = length hits
@@ -91,11 +91,11 @@ process_align bfltr output spdir (q, hits) = do
     sphits <- zipWithM ( \ kkk hs@((hitname,_):_) -> unsafeInterleaveIO $ do
                 if (S.member hitname hitsources)
                 then do
-                  printf "# %3d / %3d tgt: %s %5d / %5d [%5d] src: %s\n"
-                    lll ltgthits
-                    (B.unpack tgt)
-                    kkk lhits' lhss
-                    (B.unpack hitname)
+                  when dbg $ printf "# %3d / %3d tgt: %s %5d / %5d [%5d] src: %s\n"
+                                    lll ltgthits
+                                    (B.unpack tgt)
+                                    kkk lhits' lhss
+                                    (B.unpack hitname)
                   ts' <- filterAlignments (case bfltr of Just fltr -> if lhss>100 then Just (double2Float fltr) else Nothing
                                                          _         -> Nothing
                                           ) <$> readAlignmentCache (spdir++".d") (B.unpack hitname)
