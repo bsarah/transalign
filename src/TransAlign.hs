@@ -6,23 +6,24 @@ module Main where
 
 import Prelude hiding (log)
 
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
-import System.Directory (doesDirectoryExist,doesFileExist,getDirectoryContents)
-import Control.Monad (when,zipWithM,zipWithM_,forM)
-import System.Exit
-import qualified Data.ByteString.Lazy.Char8 as B
-import Data.List (sortBy, groupBy, sort, nub)
 import Control.Monad (forM_)
-import Data.Ord
-import System.Mem (performGC)
+import Control.Monad (when,zipWithM,zipWithM_,forM)
 import Control.Parallel.Strategies
-import System.IO.Unsafe
-import qualified Data.Vector.Generic as VG
-import Text.Printf
+import Data.List (sortBy, groupBy, sort, nub)
+import Data.Maybe (catMaybes)
+import Data.Ord
 import GHC.Conc
 import GHC.Exts (Down(..))
 import GHC.Float (double2Float)
+import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
+import qualified Data.Vector.Generic as VG
+import System.Directory (doesDirectoryExist,doesFileExist,getDirectoryContents)
+import System.Exit
+import System.IO.Unsafe
+import System.Mem (performGC)
+import Text.Printf
 
 import Align (collect_aligns,merge_aligns,A(..))
 import Blast (BlastAlignment, BlastAlignData, readAlignments)
@@ -119,8 +120,18 @@ process_align dbg bfltr output spdir (q, hits) = do
 unique :: Ord a => [a] -> [a]
 unique = S.toList . S.fromList
 
+-- | Filter blast alignment to accept only scores @>=f@, where @f@ should
+-- be somewhere in the @[0..1]@ range. Values for the per column scores are
+-- most likely around @[0.0 .. 0.1]@ but can go higher than @2.0@.
+--
+-- We assume that each alignment vector only contains entries with the same
+-- score values.
+
 filterAlignments :: Maybe Float -> [BlastAlignment] -> [BlastAlignment]
 filterAlignments Nothing = id
-filterAlignments (Just f) = map go
-  where go (s,d) = (s, VG.filter (\(A x y z) -> z >= f) d)
+filterAlignments (Just f) = catMaybes . map go
+  where go (s,d)
+          | VG.null d = Nothing
+          | z>=f      = Just (s,d)
+          where A _ _ z = VG.head d -- (s, VG.filter (\(A x y z) -> z >= f) d)
 
