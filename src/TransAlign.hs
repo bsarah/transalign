@@ -97,8 +97,8 @@ process_align dbg bfltr output spdir (q, hits) = do
                                     (B.unpack tgt)
                                     kkk lhits' lhss
                                     (B.unpack hitname)
-                  ts' <- filterAlignments (double2Float <$> bfltr) <$> readAlignmentCache (spdir++".d") (B.unpack hitname)
-                  let ts = filter ((==tgt) . fst) ts'
+                  ts' <- readAlignmentCache (spdir++".d") (B.unpack hitname)
+                  let ts = filterAlignments (double2Float <$> bfltr) $ filter ((==tgt) . fst) ts'
                   let as = {- seq (ts `using` parBuffer numCapabilities rdeepseq) $ -} collect_aligns (const ts) hs
                   return as
                 else do
