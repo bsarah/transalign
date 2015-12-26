@@ -12,7 +12,7 @@ data Opts = Opts
             , outfile :: Maybe FilePath
             , extract :: [String]
             , cite :: Bool
-            , blastfltr :: Maybe Double
+            , blastfilter :: Maybe Double
             , debug :: Bool
             } deriving (Data,Typeable, Show, Eq)
 
@@ -28,7 +28,7 @@ opts = Opts
   , blastfiles = [] &= args &= typ "BLASTXML FILES"
   , cache     = False &= help "generate alignment cache for initial alignment" &= name "c"
   , cite      = False &= help "output citation information"
-  , blastfltr = Nothing
+  , blastfilter = Nothing &= help "exclude intermediate alignment with per-column score less than this value (not using this option disables the filter)"
   , debug     = False
   } 
   &= verbosity

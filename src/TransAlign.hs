@@ -47,12 +47,12 @@ main = do
               else filter (\x -> x /= "." && x /= "..") `fmap` getDirectoryContents (up++".d")
     flip mapM_ inputs $ \i -> do  -- forM_
       myhits <- readAlignmentCache (up++".d") i
-      process_align (debug opts) (blastfltr opts) output sp (B.pack i,myhits)
+      process_align (debug opts) (blastfilter opts) output sp (B.pack i,myhits)
   else do
     --print up
     myhits <- readAlignments up
     --print $ length myhits
-    mapM_ (process_align (debug opts) (blastfltr opts) output sp) myhits
+    mapM_ (process_align (debug opts) (blastfilter opts) output sp) myhits
 
 maybeBuildCache :: (String -> IO (),String -> IO ()) -> String -> IO ()
 maybeBuildCache (warn,log) sp = do
@@ -96,9 +96,7 @@ process_align dbg bfltr output spdir (q, hits) = do
                                     (B.unpack tgt)
                                     kkk lhits' lhss
                                     (B.unpack hitname)
-                  ts' <- filterAlignments (case bfltr of Just fltr -> if lhss>100 then Just (double2Float fltr) else Nothing
-                                                         _         -> Nothing
-                                          ) <$> readAlignmentCache (spdir++".d") (B.unpack hitname)
+                  ts' <- filterAlignments (double2Float <$> bfltr) <$> readAlignmentCache (spdir++".d") (B.unpack hitname)
                   let ts = filter ((==tgt) . fst) ts'
                   let as = {- seq (ts `using` parBuffer numCapabilities rdeepseq) $ -} collect_aligns (const ts) hs
                   return as
