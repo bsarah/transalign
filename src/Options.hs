@@ -29,7 +29,7 @@ opts = Opts
   , cache     = False &= help "generate alignment cache for initial alignment" &= name "c"
   , cite      = False &= help "output citation information"
   , blastfilter = Nothing &= help "exclude intermediate alignment with per-column score less than this value (not using this option disables the filter)"
-  , debug     = False
+  , debug     = False &= help "show debug output"
   } 
   &= verbosity
   &= summary "transalign v0.1, ©2012 Ketil Malde"
