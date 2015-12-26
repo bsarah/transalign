@@ -133,5 +133,6 @@ filterAlignments (Just f) = catMaybes . map go
   where go (s,d)
           | VG.null d = Nothing
           | z>=f      = Just (s,d)
+          | otherwise = Nothing
           where A _ _ z = VG.head d -- (s, VG.filter (\(A x y z) -> z >= f) d)
 
