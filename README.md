@@ -45,15 +45,21 @@ transalign v0.1, ©2012 Ketil Malde
     Calculate sequence alignments transitively.
 
     Common flags:
-      -l --long          long output detailing matching positions
-      -c --cache         generate alignment cache for initial alignment
-      -n --limit=INT     max number of alignments to consider
-      -o --outfile=ITEM  output to file
-      -e --extract=ITEM  explicit list of alignments to extract
-      -? --help          Display help message
-      -V --version       Print version information
-      -v --verbose       Loud verbosity
-      -q --quiet         Quiet verbosity
+      -l --long             long output detailing matching positions
+      -c --cache            generate alignment cache for initial alignment
+      -n --limit=INT        max number of alignments to consider
+      -o --outfile=ITEM     output to file
+      -e --extract=ITEM     explicit list of alignments to extract
+         --cite             output citation information
+      -b --blastfilter=NUM  exclude intermediate alignment with per-column score
+                            less than this value (not using this option disables
+                            the filter)
+      -d --debug            show debug output
+      -? --help             Display help message
+      -V --version          Print version information
+         --numeric-version  Print just the version number
+      -v --verbose          Loud verbosity
+      -q --quiet            Quiet verbosity
 
 Long output produces a large table matching query positions with
 target positions, while the default is to output a table similar to
