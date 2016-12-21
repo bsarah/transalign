@@ -188,11 +188,11 @@ csv2br x = BlastResult { blastprogram = B.pack ""
                        , database = B.pack ""
                        , dbsequences = 0
                        , dbchars = 0
-                       , results = M.foldr (csv2rec) [] x
+                       , results = M.foldr (\y z -> if null y then z else csv2rec y z) [] x
                        }
 
 csv2rec :: [(String, String, String,String, String, String,String, String, String,String, String, String,String,String)] -> [BlastRecord] -> [BlastRecord]
-csv2rec _ [] = error "csv2rec: got empty list of sections!"
+csv2rec [] _ = error "csv2rec: got empty list of sections!"
 csv2rec ls@((qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qseq,sseq):xs) bs = BlastRecord
                                                                                                                       { query = SeqLabel $ B.pack qseqid
                                                                                                                       , qlength = (readI (B.pack qend)) - (readI (B.pack qstart))
@@ -220,7 +220,7 @@ csv2match (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,
                                                                                                                    , identity = (readI $ B.pack pident, readI $ B.pack length)
                                                                                                                    , qseq = B.pack qseq1
                                                                                                                    , hseq = B.pack sseq1
-                                                                                                                   , aux = undefined -- we don't need this, how can we leave it empty?
+                                                                                                                   , aux = Strands Plus Plus -- change this later on, not yet perfect, do we need this?
                                                                                                                    }:[]
 
 
