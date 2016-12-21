@@ -13,9 +13,13 @@ module Blast where
 import qualified Data.ByteString.Lazy.Char8 as B
 import Bio.BlastXML -- hiding (SeqId)
 import Bio.Core
+import Data.Csv
+import Data.Char
+import Data.Either
 import qualified Data.Map as M
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
+import qualified Data.List as L
 import Data.Vector.Unboxed.Deriving
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable
@@ -95,16 +99,16 @@ getAlignments res = map rec2align . results $ res
 
 -- | Read a set of alignments from a BlastXML file
 readAlignments :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
-readAlignments f = getAlignments `fmap` readXML f
+readAlignments f = getAlignments `fmap` readCSV f
 
 -- | Read alignments, and return a Map for query to set of alignments
 readAlignmentMap :: FilePath -> IO BlastMap
-readAlignmentMap f = M.fromList `fmap` getAlignments `fmap` readXML f
+readAlignmentMap f = M.fromList `fmap` getAlignments `fmap` readCSV f
 
 -- | Read Blast alignments, but only for the given seqids, and with a max no of hits per seqid
 readFilteredAlignmentMap :: [SeqId B.ByteString] -> Int -> FilePath -> IO BlastMap
 readFilteredAlignmentMap seqs maxnum f = do
-  M.fromList `fmap` extractBlast `fmap` readXML f
+  M.fromList `fmap` extractBlast `fmap` readCSV f
   where extractBlast res = map (rec2align (prog res)) . filter wanted . results $ res
         wanted r = S (qname r) `elem` seqs
         rec2align p r = (qname r,concatMap (hit2align p) $ take maxnum $ hits r)
@@ -144,3 +148,88 @@ snd' (A _ y _) = y
 
 trd' :: A -> Float
 trd' (A _ _ z) = z
+
+
+
+
+-- try to change readXML into readCSV but keep the data structure
+-- read from CSV to BlastResult
+-- f is the file to read in
+readCSV :: FilePath -> IO BlastResult
+readCSV f = do
+  let myOptions = defaultDecodeOptions {
+        decDelimiter = fromIntegral (ord '\t')
+        }
+  inputCSV <- B.readFile f
+  --create map of query sequences as for each query, we create a BlastResult
+  --(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qseq,sseq)
+  let decodedCSVoutput = go (decodeWith myOptions HasHeader (inputCSV) :: Either
+                              String (V.Vector (String, String, String,String, String, String,String, String, String, String, String, String,String,String)))
+    in return . csv2br $ L.foldl (\m x -> M.insertWith (++) (myQuery x) [x] m) (M.fromList [])  decodedCSVoutput
+  --  return $ csv2br m
+    where go (Left x) = error (""++(x)++"")
+          go (Right xs) = V.toList xs
+
+
+-- foldl :: Foldable t => (b -> a -> b) -> b -> t a -> b
+--                          map a   map   map list a  map
+
+-- insertWith :: Ord k => (a -> a -> a) -> k -> a -> Map k a -> Map k a 
+
+myQuery :: (String, String, String,String, String, String,String, String, String, String, String, String,String,String) -> String
+myQuery (q,_,_,_,_,_,_,_,_,_,_,_,_,_) = q
+
+
+csv2br :: M.Map String [(String, String, String,String, String, String,String, String, String,String, String, String,String,String)] -> BlastResult
+csv2br x = BlastResult { blastprogram = B.pack ""
+                       , blastversion = B.pack ""
+                       , blastdate = B.pack ""
+                       , blastreferences = B.pack ""
+                       , database = B.pack ""
+                       , dbsequences = 0
+                       , dbchars = 0
+                       , results = M.foldr (csv2rec) [] x
+                       }
+
+csv2rec :: [(String, String, String,String, String, String,String, String, String,String, String, String,String,String)] -> [BlastRecord] -> [BlastRecord]
+csv2rec _ [] = error "csv2rec: got empty list of sections!"
+csv2rec ls@((qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qseq,sseq):xs) bs = BlastRecord
+                                                                                                                      { query = SeqLabel $ B.pack qseqid
+                                                                                                                      , qlength = (readI (B.pack qend)) - (readI (B.pack qstart))
+                                                                                                                      , hits = L.map csv2hit ls -- continue here to create BlastHits which will be a list with one BlastMatch
+                                                                                                                      }:bs
+  
+csv2hit :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String) -> BlastHit
+--if empty, return
+csv2hit ls@(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qseq,sseq) = BlastHit
+                                                                                                              { hitId = B.pack sseqid
+                                                                                                              , subject = SeqLabel $ B.pack sseqid
+                                                                                                              , slength = (readI (B.pack send)) - (readI( B.pack sstart))
+                                                                                                              , matches = csv2match ls -- continue here to create BlastMatches which is usually only one per hit
+                                                                                                              }
+
+csv2match :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String) -> [BlastMatch]
+--if empty, return
+csv2match (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qseq1,sseq1) = BlastMatch
+                                                                                                                   { bits = readF $ B.pack bitscore
+                                                                                                                   , e_val = readF $ B.pack evalue
+                                                                                                                   , q_from = readI $ B.pack qstart
+                                                                                                                   , q_to = readI $ B.pack qend
+                                                                                                                   , h_from = readI $ B.pack sstart
+                                                                                                                   , h_to = readI $ B.pack send
+                                                                                                                   , identity = (readI $ B.pack pident, readI $ B.pack length)
+                                                                                                                   , qseq = B.pack qseq1
+                                                                                                                   , hseq = B.pack sseq1
+                                                                                                                   , aux = undefined -- we don't need this, how can we leave it empty?
+                                                                                                                   }:[]
+
+
+
+readI :: B.ByteString -> Int
+readI x = case B.readInt x of 
+  Just (n,_) -> n
+  _ -> error ("Couldn't read an Int from string: '"++B.unpack x++"'")
+  
+
+readF :: B.ByteString -> Double
+readF = read . B.unpack
