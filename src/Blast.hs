@@ -179,6 +179,7 @@ readCSV f = do
 myQuery :: (String, String, String,String, String, String,String, String, String, String, String, String,String,String) -> String
 myQuery (q,_,_,_,_,_,_,_,_,_,_,_,_,_) = q
 
+-- blubb
 
 csv2br :: M.Map String [(String, String, String,String, String, String,String, String, String,String, String, String,String,String)] -> BlastResult
 csv2br x = BlastResult { blastprogram = B.pack ""
