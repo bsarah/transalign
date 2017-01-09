@@ -151,7 +151,7 @@ trd' (A _ _ z) = z
 
 
 
-
+-- ATTENTION: Cassava supports csv lines with AT MOST 15 columns!!!
 -- try to change readXML into readCSV but keep the data structure
 -- read from CSV to BlastResult
 -- f is the file to read in
@@ -160,24 +160,26 @@ readCSV f = do
   let myOptions = defaultDecodeOptions {
         decDelimiter = fromIntegral (ord '\t')
         }
-  input <- B.readFile f
-  let headerLines = take 5 $ B.lines input
-  inputCSV <- sortInput input
+  let input = B.readFile f -- readFile :: FilePath -> IO ByteString
+  headerLines <- do
+    myLines <- fmap (B.unlines . take 5 . B.lines) input
+    return $ B.lines myLines -- lines:: B.ByteString -> [B.ByteString]
+  inputCSV <- do
+    myInp <- fmap sortInput input -- fmap :: Functor f => (a -> b) -> f a -> f b
+    return myInp
   --create map of query sequences as for each query, we create a BlastResult
-  --(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qseq,sseq)
-  let decodedCSVoutput = go (decodeWith myOptions NoHeader (inputCSV) :: Either
-                              String (V.Vector (String, String, String,String, String, String,String, String, String, String, String, String,String,String,String,String)))
+  --(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq)
+  let decodedCSVoutput = go (decodeWith myOptions HasHeader (inputCSV) :: Either
+                              String (V.Vector (String, String, String,String, String, String,String, String, String, String, String, String,String,String,String)))
     in return . csv2br headerLines $ L.foldl (\m x -> M.insertWith (++) (myQuery x) [x] m) (M.fromList [])  decodedCSVoutput
   --  return $ csv2br m
     where go (Left x) = error (""++(x)++"")
           go (Right xs) = V.toList xs
-          sortInput :: B.ByteString -> IO B.ByteString
-          sortInput i = do
+          sortInput :: B.ByteString -> B.ByteString
+          sortInput i = 
             let myLines = B.lines i
                 myBlubb =  L.filter (isGood) myLines
-                myUnlines = B.unlines myBlubb
-              in return myUnlines
---            return myUnlines
+              in B.unlines myBlubb
           isGood :: B.ByteString -> Bool
           isGood x = if B.isPrefixOf (B.pack "#") x then False else True
 
@@ -196,8 +198,8 @@ readCSV f = do
 -- isPrefixOf :: ByteString -> ByteString -> Bool
 -- lines :: ByteString -> [ByteString] 
 
-myQuery :: (String, String, String,String, String, String,String, String, String, String, String, String,String,String,String,String) -> String
-myQuery (q,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) = q
+myQuery :: (String, String, String,String, String, String,String, String, String, String, String, String,String,String,String) -> String
+myQuery (q,_,_,_,_,_,_,_,_,_,_,_,_,_,_) = q
 
 -- blubb
 
@@ -206,9 +208,9 @@ myQuery (q,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) = q
 -- # BLASTX 2.4.0+
 -- # Query: ENSGAUG00000000452_
 -- # Database: uniref50.fasta
--- # Fields: query id, subject id, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score, query seq, subject seq
+-- # Fields: (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq) = query id, subject id, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score, subject frame, query seq, subject seq
 -- # 17880 hits found
-csv2br :: [B.ByteString] -> M.Map String [(String, String, String,String, String, String,String, String, String,String, String, String,String,String,String,String)] -> BlastResult
+csv2br :: [B.ByteString] -> M.Map String [(String, String, String,String, String, String,String, String, String,String, String, String,String,String,String)] -> BlastResult
 csv2br h x = BlastResult { blastprogram = getProg h
                          , blastversion = getVers h
                          , blastdate = B.pack ""
@@ -224,26 +226,26 @@ csv2br h x = BlastResult { blastprogram = getProg h
                    elOne (a,_) = a
                    elTwo (_,b) = b
 
-csv2rec :: [(String, String, String,String, String, String,String, String, String,String, String, String,String,String,String,String)] -> [BlastRecord] -> [BlastRecord]
+csv2rec :: [(String, String, String,String, String, String,String, String, String,String, String, String,String,String,String)] -> [BlastRecord] -> [BlastRecord]
 csv2rec [] _ = error "csv2rec: got empty list of sections!"
-csv2rec ls@((qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qframe,sframe,qseq,sseq):xs) bs = BlastRecord
+csv2rec ls@((qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq):xs) bs = BlastRecord
                                                                                                                                     { query = SeqLabel $ B.pack qseqid
                                                                                                                                     , qlength = (readI (B.pack qend)) - (readI (B.pack qstart))
                                                                                                                                     , hits = L.map csv2hit ls -- continue here to create BlastHits which will be a list with one BlastMatch
                                                                                                                                     }:bs
   
-csv2hit :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String,String,String) -> BlastHit
+csv2hit :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String,String) -> BlastHit
 --if empty, return
-csv2hit ls@(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qframe,sframe,qseq,sseq) = BlastHit
+csv2hit ls@(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq) = BlastHit
                                                                                                                             { hitId = B.pack sseqid
                                                                                                                             , subject = SeqLabel $ B.pack sseqid
                                                                                                                             , slength = (readI (B.pack send)) - (readI( B.pack sstart))
                                                                                                                             , matches = csv2match ls -- continue here to create BlastMatches which is usually only one per hit
                                                                                                                             }
 
-csv2match :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String,String,String) -> [BlastMatch]
+csv2match :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String,String) -> [BlastMatch]
 --if empty, return
-csv2match (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,qframe,sframe,qseq1,sseq1) = BlastMatch
+csv2match (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq1,sseq1) = BlastMatch
                                                                                                                              { bits = readF $ B.pack bitscore
                                                                                                                              , e_val = readF $ B.pack evalue
                                                                                                                              , q_from = readI $ B.pack qstart
