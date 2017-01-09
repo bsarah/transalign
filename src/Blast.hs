@@ -93,8 +93,8 @@ targets = map (S . fst) . concat . map snd . M.toList
 getAlignments :: BlastResult -> [(B.ByteString, [BlastAlignment])]
 getAlignments res = map rec2align . results $ res
   where rec2align r = (qname r,concatMap (hit2align prog) $ hits r)
-        prog = case blastprogram res of "blastp" -> BlastP
-                                        "blastx" -> BlastX
+        prog = case blastprogram res of "BLASTP" -> BlastP
+                                        "BLASTX" -> BlastX
                                         _ -> error ("undefined blastprogram")
 
 -- | Read a set of alignments from a BlastXML file
