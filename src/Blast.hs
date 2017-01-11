@@ -24,6 +24,7 @@ import Data.Vector.Unboxed.Deriving
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable
 
+import Debug.Trace
 
 import Data.Int
 import Text.Printf
@@ -162,14 +163,14 @@ readCSV f = do
         }
   let input = B.readFile f -- readFile :: FilePath -> IO ByteString
   headerLines <- do
-    myLines <- fmap (B.unlines . take 5 . B.lines) input
+    myLines <- fmap (B.unlines . take 3 . B.lines) input
     return $ B.lines myLines -- lines:: B.ByteString -> [B.ByteString]
   inputCSV <- do
     myInp <- fmap sortInput input -- fmap :: Functor f => (a -> b) -> f a -> f b
     return myInp
   --create map of query sequences as for each query, we create a BlastResult
   --(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq)
-  let decodedCSVoutput = go (decodeWith myOptions HasHeader (inputCSV) :: Either
+  let decodedCSVoutput = go (decodeWith myOptions NoHeader (inputCSV) :: Either
                               String (V.Vector (String, String, String,String, String, String,String, String, String, String, String, String,String,String,String)))
     in return . csv2br headerLines $ L.foldl (\m x -> M.insertWith (++) (myQuery x) [x] m) (M.fromList [])  decodedCSVoutput
   --  return $ csv2br m
@@ -211,25 +212,26 @@ myQuery (q,_,_,_,_,_,_,_,_,_,_,_,_,_,_) = q
 -- # Fields: (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq) = query id, subject id, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score, subject frame, query seq, subject seq
 -- # 17880 hits found
 csv2br :: [B.ByteString] -> M.Map String [(String, String, String,String, String, String,String, String, String,String, String, String,String,String,String)] -> BlastResult
-csv2br h x = BlastResult { blastprogram = getProg h
-                         , blastversion = getVers h
+csv2br h x = BlastResult { blastprogram = let g = getProg h in traceShow ("blastprogram",g) $ g
+                         , blastversion = let t = getVers h in traceShow ("blastversion",t) $ t
                          , blastdate = B.pack ""
                          , blastreferences = B.pack ""
-                         , database = getDB h
+                         , database = let d = getDB h in traceShow ("database",d) $ d
                          , dbsequences = 0
                          , dbchars = 0
                          , results = M.foldr (\y z -> if null y then z else csv2rec y z) [] x
                          }
-             where getProg h = elOne . B.span (isSpace) . B.drop 2 $ h!!0
-                   getVers h = elTwo . B.span (isSpace) . B.drop 2 $ h!!0
-                   getDB h = elTwo . B.span (isSpace) . B.drop 2 $ h!!2
-                   elOne (a,_) = a
-                   elTwo (_,b) = b
+  where getProg h = let progarr =  B.words . B.drop 2 $ h!!0 in progarr!!0 -- drop 2 takes away the first 2 characters
+        getVers h = let versarr = B.words . B.drop 2 $ h!!0 in versarr!!1
+        getDB h =  let dbarr =  B.words . B.drop 2 $ h!!2 in dbarr!!1
+        elOne (a,_) = a
+        elTwo (_,b) = b
+
 
 csv2rec :: [(String, String, String,String, String, String,String, String, String,String, String, String,String,String,String)] -> [BlastRecord] -> [BlastRecord]
 csv2rec [] _ = error "csv2rec: got empty list of sections!"
 csv2rec ls@((qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq):xs) bs = BlastRecord
-                                                                                                                                    { query = SeqLabel $ B.pack qseqid
+                                                                                                                                    { query = let q = SeqLabel $ B.pack qseqid in traceShow("query",q) $ q
                                                                                                                                     , qlength = (readI (B.pack qend)) - (readI (B.pack qstart))
                                                                                                                                     , hits = L.map csv2hit ls -- continue here to create BlastHits which will be a list with one BlastMatch
                                                                                                                                     }:bs
@@ -237,7 +239,7 @@ csv2rec ls@((qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,sen
 csv2hit :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String,String) -> BlastHit
 --if empty, return
 csv2hit ls@(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq,sseq) = BlastHit
-                                                                                                                            { hitId = B.pack sseqid
+                                                                                                                            { hitId = let s = B.pack sseqid in traceShow("subject id",s) $ s
                                                                                                                             , subject = SeqLabel $ B.pack sseqid
                                                                                                                             , slength = (readI (B.pack send)) - (readI( B.pack sstart))
                                                                                                                             , matches = csv2match ls -- continue here to create BlastMatches which is usually only one per hit
@@ -246,7 +248,7 @@ csv2hit ls@(qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send
 csv2match :: (String, String, String,String, String, String,String, String, String,String, String, String,String,String,String) -> [BlastMatch]
 --if empty, return
 csv2match (qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore,sframe,qseq1,sseq1) = BlastMatch
-                                                                                                                             { bits = readF $ B.pack bitscore
+                                                                                                                             { bits = let b = readF $ B.pack bitscore in traceShow("bitscore",b) $ b
                                                                                                                              , e_val = readF $ B.pack evalue
                                                                                                                              , q_from = readI $ B.pack qstart
                                                                                                                              , q_to = readI $ B.pack qend
