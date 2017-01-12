@@ -23,7 +23,7 @@ parseTabularBlasts :: C.ByteString -> Either String (V.Vector BlastTabularResult
 parseTabularBlasts = parseOnly genParseTabularBlasts
 
 data BlastTabularResult = BlastTabularResult
-  { blastProgram :: Char,
+  { blastProgram :: C.ByteString,
     blastQuery :: C.ByteString,
     blastDatabase :: C.ByteString,
     blastHitNumber :: Int,
@@ -39,16 +39,25 @@ genParseTabularBlasts = do
 genParseTabularBlast :: Parser BlastTabularResult
 genParseTabularBlast = do
   choice [string "# BLAST",string "# blast"]
-  _blastProgram <- choice[char 'n', char 'P']
+  _blastProgram <- many1 (notChar '\n') <?> "Program"
   string "\n# Query: "
-  _blastQuery <- many1 (notChar '\n')
+  _blastQuery <- many1 (notChar '\n')  <?> "Query"
   string "\n# Database: "
-  _blastDatabase <- many1 (notChar '\n')
+  _blastDatabase <- many1 (notChar '\n')  <?> "Db"
   string "\n# "
-  _blastHitNumber <- decimal
+  --fields line
+  skipMany (try genParseFieldLine)
+  _blastHitNumber <- decimal  <?> "Hit number"
   string " hits found\n"
   _tabularHit <- many' genParseBlastTabularHit
-  return $ BlastTabularResult _blastProgram (C.pack _blastQuery) (C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
+  return $ BlastTabularResult (C.pack ("BLAST" ++ _blastProgram)) (C.pack _blastQuery) (C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
+
+genParseFieldLine :: Parser ()
+genParseFieldLine = do
+  string "Fields:"
+  skipMany (notChar '\n')
+  string "\n# "
+  return ()
 
 data BlastTabularHit = BlastTabularHit
   { queryId :: C.ByteString,
