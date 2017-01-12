@@ -9,21 +9,21 @@ import qualified Data.Vector as V
 import System.Directory
 
 -- | reads and parses tabular Blast result from provided filePath
-readTabularBlast :: String -> IO (Either String BlastTabularResult)
-readTabularBlast filePath = do
+readTabularBlasts :: String -> IO (Either String [BlastTabularResult])
+readTabularBlasts filePath = do
   blastFileExists <- doesFileExist filePath
   if blastFileExists
      then do
        blastData <- C.readFile filePath
-       let parsedBlast = parseTabularBlast blastData
+       let parsedBlast = parseTabularBlasts blastData
        return parsedBlast
-     else return (Left ("Provided tabular Blastfile does not exist at:" ++ filePath))
+     else return (Left ("Provided tabular blast file does not exist at:" ++ filePath))
 
-parseTabularBlast :: C.ByteString -> Either String BlastTabularResult
-parseTabularBlast = parseOnly genParseTabularBlast
+parseTabularBlasts :: C.ByteString -> Either String [BlastTabularResult]
+parseTabularBlasts = parseOnly genParseTabularBlasts
 
 data BlastTabularResult = BlastTabularResult
-  { blastProgram :: C.ByteString,
+  { blastProgram :: Char,
     blastQuery :: C.ByteString,
     blastDatabase :: C.ByteString,
     blastHitNumber :: Int,
@@ -31,10 +31,15 @@ data BlastTabularResult = BlastTabularResult
   }
   deriving (Show, Eq)
 
+genParseTabularBlasts :: Parser [BlastTabularResult]
+genParseTabularBlasts = do
+  bresults <- many1 genParseTabularBlast
+  return bresults
+
 genParseTabularBlast :: Parser BlastTabularResult
 genParseTabularBlast = do
-  string "# "
-  _blastProgram <-  many1 (notChar '\n')
+  choice [string "# BLAST",string "# blast"]
+  _blastProgram <- choice[char 'n', char 'P']
   string "\n# Query: "
   _blastQuery <- many1 (notChar '\n')
   string "\n# Database: "
@@ -42,8 +47,8 @@ genParseTabularBlast = do
   string "\n# "
   _blastHitNumber <- decimal
   string " hits found\n"
-  _tabularHit <- many1 genParseBlastTabularHit
-  return $ BlastTabularResult (C.pack _blastProgram) (C.pack _blastQuery) (C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
+  _tabularHit <- many' genParseBlastTabularHit
+  return $ BlastTabularResult _blastProgram (C.pack _blastQuery) (C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
 
 data BlastTabularHit = BlastTabularHit
   { queryId :: C.ByteString,
