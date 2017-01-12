@@ -17,6 +17,6 @@ main = do
   args <- getArgs
   let inputFile = (head args)
   inputData <- readTabularBlasts inputFile
-  let rightBlast = fromRight inputData
-  print rightBlast
-
+  if isRight inputData
+     then print (fromRight inputData)
+     else print (fromLeft inputData)
