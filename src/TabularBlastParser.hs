@@ -4,9 +4,23 @@
 module TabularBlastParser (module TabularBlastParser)
 where
 import Data.Attoparsec.ByteString.Char8
-import Data.Word
 import qualified Data.ByteString.Char8 as C
 import qualified Data.Vector as V
+import System.Directory
+
+-- | reads and parses tabular Blast result from provided filePath
+readTabularBlast :: String -> IO (Either String BlastTabularResult)
+readTabularBlast filePath = do
+  blastFileExists <- doesFileExist filePath
+  if blastFileExists
+     then do
+       blastData <- C.readFile filePath
+       let parsedBlast = parseTabularBlast blastData
+       return parsedBlast
+     else return (Left ("Provided tabular Blastfile does not exist at:" ++ filePath))
+
+parseTabularBlast :: C.ByteString -> Either String BlastTabularResult
+parseTabularBlast = parseOnly genParseTabularBlast
 
 data BlastTabularResult = BlastTabularResult
   { blastProgram :: C.ByteString,
@@ -17,8 +31,8 @@ data BlastTabularResult = BlastTabularResult
   }
   deriving (Show, Eq)
 
-parseTabularBlastHeader :: Parser BlastTabularResult
-parseTabularBlastHeader = do
+genParseTabularBlast :: Parser BlastTabularResult
+genParseTabularBlast = do
   string "# "
   _blastProgram <-  many1 (notChar '\n')
   string "\n# Query: "
@@ -28,7 +42,7 @@ parseTabularBlastHeader = do
   string "\n# "
   _blastHitNumber <- decimal
   string " hits found\n"
-  _tabularHit <- many1 parseBlastTabularHit
+  _tabularHit <- many1 genParseBlastTabularHit
   return $ BlastTabularResult (C.pack _blastProgram) (C.pack _blastQuery) (C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
 
 data BlastTabularHit = BlastTabularHit
@@ -50,8 +64,8 @@ data BlastTabularHit = BlastTabularHit
   }
   deriving (Show, Eq)
 
-parseBlastTabularHit :: Parser BlastTabularHit
-parseBlastTabularHit = do
+genParseBlastTabularHit :: Parser BlastTabularHit
+genParseBlastTabularHit = do
   _queryId <- many1 (notChar '\t')
   char '\t'
   _subjectId <- many1 (notChar '\t')
