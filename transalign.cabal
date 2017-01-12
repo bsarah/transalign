@@ -38,3 +38,8 @@ Executable showcache
 --   Hs-Source-Dirs: src
 --   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3,  cassava >= 0.4.5.0
 --   Ghc-Options:  -prof -fprof-auto-top -rtsopts -threaded -rtsopts -Odph -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100 -feager-blackholing
+Library
+  Hs-Source-Dirs:      ./src/
+  ghc-options:         -Wall -O2 -fno-warn-unused-do-bind
+  build-depends:       base >=4.5 && <5, cmdargs, blastxml>=0.3.2, bytestring, vector, attoparsec
+  Exposed-Modules:     TabularBlastParser
