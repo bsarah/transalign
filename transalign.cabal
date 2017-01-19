@@ -41,5 +41,5 @@ Executable showcache
 Library
   Hs-Source-Dirs:      ./src/
   ghc-options:         -Wall -O2 -fno-warn-unused-do-bind
-  build-depends:       base >=4.5 && <5, cmdargs, blastxml>=0.3.2, bytestring, vector, attoparsec
+  build-depends:       base >=4.5 && <5, cmdargs, blastxml>=0.3.2, bytestring, vector, attoparsec, directory
   Exposed-Modules:     TabularBlastParser
