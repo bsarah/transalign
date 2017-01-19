@@ -11,6 +11,7 @@
 module Blast where
 
 import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Char8 as C
 import Bio.BlastXML -- hiding (SeqId)
 import Bio.Core
 import Data.Csv
@@ -30,6 +31,7 @@ import Text.Printf
 import GHC.Float (double2Float)
 import Align
 
+import TabularBlastParser
 
 type BlastAlignData = Alignment Float Int32 Int32
 type BlastAlignment = (B.ByteString,BlastAlignData)
@@ -81,6 +83,30 @@ unify = uniq . sort . concat
         uniq [x] = [x]
         uniq [] = []
 -}
+
+calculateScore :: B.ByteString -> BlastTabularHit -> BlastAlignData
+calculateScore prog bth = G.map add_score $ go (queryStart bth) (subjectStart bth) (querySeq bth) (subjectSeq bth)
+  where (hstep,qstep) = case (B.unpack prog) of "BLASTX" -> (1,3) -- blastx? (1,1) else
+                                                "BLASTP" -> (1,1)
+                                                -- etc.
+        go qi hi qsq hsq = case (B.uncons (querySeq bth),B.uncons (subjectSeq bth)) of
+          (Just ('-',qs),Just (_h,hs)) -> go qi (hi+hstep) qs hs
+          (Just (_q,qs),Just ('-',hs)) -> go (qi+qstep) hi qs hs
+          (Just (_q,qs),Just (_h,hs))   -> (qi,hi) `G.cons` go (qi+qstep) (hi+hstep) qs hs
+          (Nothing,Nothing)           -> G.empty
+          _ -> error "Case closed! just to shut up the type checker"
+--        qstart = case aux m of Frame Minus _ -> negate (q_to m)
+--                               _ -> q_from m
+--        hstart = h_from m
+        hit_length = (alignmentLength bth)
+        add_score (p,q) = (A (fromIntegral p) (fromIntegral q) (double2Float (bitScore bth/fromIntegral hit_length)))
+
+
+hit2align' :: B.ByteString -> (V.Vector BlastTabularHit) -> [BlastAlignment]
+hit2align' p v = V.toList $ V.map evaluate v
+  where evaluate bth = let subject = subjectId bth
+                           score = calculateScore p bth
+                         in (subject,score)
           
 --                     seqid             seqid       alignment
 type BlastMap = M.Map B.ByteString [BlastAlignment]
@@ -93,13 +119,28 @@ targets = map (S . fst) . concat . map snd . M.toList
 getAlignments :: BlastResult -> [(B.ByteString, [BlastAlignment])]
 getAlignments res = map rec2align . results $ res
   where rec2align r = (qname r,concatMap (hit2align prog) $ hits r)
-        prog = case blastprogram res of "BLASTP" -> BlastP
-                                        "BLASTX" -> BlastX
+          prog = case blastprogram res of "BLASTP" -> BlastP
+                                          "BLASTX" -> BlastX
                                         _ -> error ("undefined blastprogram")
+
+getAlignments' :: (Either String (V.Vector BlastTabularResult)) -> [(B.ByteString, [BlastAlignment])]
+getAlignments' v = case v of Right x -> V.toList $ V.map evaluate x
+                             Left y -> error ("blubb")
+  where evaluate btr = let query = blastQuery btr
+                           prog = blastProgram btr
+                           ba = hit2align' prog $ hitLines btr
+                         in (query,ba)
+
+--for each BlastTabularResult we get a pair (ByteString,[BlastAlignment])
 
 -- | Read a set of alignments from a BlastXML file
 readAlignments :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
 readAlignments f = getAlignments `fmap` readCSV f
+
+
+readAlignments' :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
+readAlignments' f = getAlignments' `fmap` readTabularBlasts f
+
 
 -- | Read alignments, and return a Map for query to set of alignments
 readAlignmentMap :: FilePath -> IO BlastMap
