@@ -137,7 +137,7 @@ getAlignments' v = case v of Right x -> V.toList $ V.map evaluate x
 readAlignments :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
 readAlignments f = getAlignments `fmap` readCSV f
 
-
+-- | Read a set of alignments from a Blast CSV file
 readAlignments' :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
 readAlignments' f = getAlignments' `fmap` readTabularBlasts f
 
@@ -145,6 +145,10 @@ readAlignments' f = getAlignments' `fmap` readTabularBlasts f
 -- | Read alignments, and return a Map for query to set of alignments
 readAlignmentMap :: FilePath -> IO BlastMap
 readAlignmentMap f = M.fromList `fmap` getAlignments `fmap` readCSV f
+
+readAlignmentMap' :: FilePath -> IO BlastMap
+readAlignmentMap' f = M.fromList `fmap` getAlignments' `fmap` readTabularBlasts f
+
 
 -- | Read Blast alignments, but only for the given seqids, and with a max no of hits per seqid
 readFilteredAlignmentMap :: [SeqId B.ByteString] -> Int -> FilePath -> IO BlastMap
@@ -156,6 +160,18 @@ readFilteredAlignmentMap seqs maxnum f = do
         prog r = case blastprogram r of "blastp" -> BlastP
                                         "blastx" -> BlastX
                                         _ -> error ("undefined blastprogram")
+
+readFilteredAlignmentMap' :: [SeqId B.ByteString] -> Int -> FilePath -> IO BlastMap
+readFilteredAlignmentMap' seqs maxnum f = do
+  M.fromList `fmap` extractBlast `fmap` readTabularBlasts f
+  where extractBlast v = case v of Right x -> concatMap evaluate $ V.toList x
+                                   Left y -> error ("blubb")
+        evaluate btr = let query = blastQuery btr
+                           prog = blastProgram btr
+                           elm = head . V.toList $ hitLines btr
+                           ba = hit2align' prog . V.fromList . take maxnum . V.toList $ hitLines btr
+                         in if elem (S (queryId elm)) seqs then [(query,ba)] else []
+
 
 -- testing:
 
