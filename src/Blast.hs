@@ -11,7 +11,7 @@
 module Blast where
 
 import qualified Data.ByteString.Lazy.Char8 as B
-import qualified Data.ByteString.Char8 as C
+--import qualified Data.ByteString.Char8 as C
 import Bio.BlastXML -- hiding (SeqId)
 import Bio.Core
 import Data.Csv
@@ -85,7 +85,7 @@ unify = uniq . sort . concat
 -}
 
 calculateScore :: B.ByteString -> BlastTabularHit -> BlastAlignData
-calculateScore prog bth = G.map add_score $ go (queryStart bth) (subjectStart bth) (querySeq bth) (subjectSeq bth)
+calculateScore prog bth = G.map add_score $ go (queryStart bth) (hitSeqStart bth) (querySeq bth) (subjectSeq bth)
   where (hstep,qstep) = case (B.unpack prog) of "BLASTX" -> (1,3) -- blastx? (1,1) else
                                                 "BLASTP" -> (1,1)
                                                 -- etc.
@@ -119,8 +119,8 @@ targets = map (S . fst) . concat . map snd . M.toList
 getAlignments :: BlastResult -> [(B.ByteString, [BlastAlignment])]
 getAlignments res = map rec2align . results $ res
   where rec2align r = (qname r,concatMap (hit2align prog) $ hits r)
-          prog = case blastprogram res of "BLASTP" -> BlastP
-                                          "BLASTX" -> BlastX
+        prog = case blastprogram res of "BLASTP" -> BlastP
+                                        "BLASTX" -> BlastX
                                         _ -> error ("undefined blastprogram")
 
 getAlignments' :: (Either String (V.Vector BlastTabularResult)) -> [(B.ByteString, [BlastAlignment])]

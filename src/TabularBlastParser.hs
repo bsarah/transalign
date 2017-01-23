@@ -5,6 +5,8 @@ module TabularBlastParser (module TabularBlastParser)
 where
 import Data.Attoparsec.ByteString.Char8
 import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Builder as S
+import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Vector as V
 import System.Directory
 
@@ -23,9 +25,9 @@ parseTabularBlasts :: C.ByteString -> Either String (V.Vector BlastTabularResult
 parseTabularBlasts = parseOnly genParseTabularBlasts
 
 data BlastTabularResult = BlastTabularResult
-  { blastProgram :: C.ByteString,
-    blastQuery :: C.ByteString,
-    blastDatabase :: C.ByteString,
+  { blastProgram :: B.ByteString,
+    blastQuery :: B.ByteString,
+    blastDatabase :: B.ByteString,
     blastHitNumber :: Int,
     hitLines :: V.Vector BlastTabularHit
   }
@@ -50,7 +52,7 @@ genParseTabularBlast = do
   _blastHitNumber <- decimal  <?> "Hit number"
   string " hits found\n"
   _tabularHit <- many' genParseBlastTabularHit
-  return $ BlastTabularResult (C.pack ("BLAST" ++ _blastProgram)) (C.pack _blastQuery) (C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
+  return $ BlastTabularResult (B.pack ("BLAST" ++ _blastProgram)) (toLB $ C.pack _blastQuery) (toLB $ C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
 
 genParseFieldLine :: Parser ()
 genParseFieldLine = do
@@ -60,8 +62,8 @@ genParseFieldLine = do
   return ()
 
 data BlastTabularHit = BlastTabularHit
-  { queryId :: C.ByteString,
-    subjectId ::  C.ByteString,
+  { queryId :: B.ByteString,
+    subjectId ::  B.ByteString,
     seqIdentity :: Double,
     alignmentLength :: Int,
     misMatches :: Int,
@@ -73,8 +75,8 @@ data BlastTabularHit = BlastTabularHit
     eValue :: Double,
     bitScore :: Double,
     subjectFrame :: Int,
-    querySeq  :: C.ByteString,
-    subjectSeq  :: C.ByteString
+    querySeq  :: B.ByteString,
+    subjectSeq  :: B.ByteString
   }
   deriving (Show, Eq)
 
@@ -110,7 +112,7 @@ genParseBlastTabularHit = do
   char '\t'
   _subjectSeq <- many1 (satisfy bioLetters)
   char '\n'
-  return $ BlastTabularHit (C.pack _queryId) (C.pack _subjectId) _seqIdentity _alignmentLength _misMatches _gapOpenScore _queryStart _queryEnd _hitSeqStart _hitSeqEnd _eValue _bitScore _subjectFrame (C.pack _querySeq) (C.pack _subjectSeq)
+  return $ BlastTabularHit (B.pack _queryId) (B.pack _subjectId) _seqIdentity _alignmentLength _misMatches _gapOpenScore _queryStart _queryEnd _hitSeqStart _hitSeqEnd _eValue _bitScore _subjectFrame (B.pack _querySeq) (B.pack _subjectSeq)
   
 --IUPAC amino acid with gap
 aminoacidLetters :: Char -> Bool
@@ -123,3 +125,7 @@ nucleotideLetters = inClass "AGTCURYSWKMBDHVN-."
 --IUPAC nucleic acid characters with gap
 bioLetters :: Char -> Bool
 bioLetters = inClass "ABCDEFGHIJKLMNOPQRSTVWXYZ.-"
+
+
+toLB :: C.ByteString -> B.ByteString
+toLB = S.toLazyByteString . S.byteString
