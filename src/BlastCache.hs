@@ -36,12 +36,17 @@ buildCache xml = do
 -- | Write a set of alignments to a file in a specified directory 
   -- BlastAlignment::(Bytestring,BlastAlignData)
 writeAlignmentCache :: String -> (B.ByteString, [BlastAlignment]) -> IO ()
+writeAlignmentCache dir (qsid',[]) = return
 writeAlignmentCache dir (qsid',ts) = do
   let qsid = B.unpack qsid'
       dnew = printf "%03d" $ hash qsid `mod` 1000
   createDirectoryIfMissing True (dir ++ "/" ++ dnew)
-  encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
-      where convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest)
+--encodeFile :: Binary a => FilePath -> a -> IO () equal to: B.writeFile f . encode
+  --encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
+  let res = encode $ map ( convert.second U.toList) ts
+  B.writeFile (dir++"/"++dnew++"/"++B.unpack qsid') res
+      where {-convert (name,[]) = (name,0,[])-}
+            convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest) -- s=score, with list of all aligned positions [(a,b)]
 
 
 -- | Given the directory and a query sequence, extract the alignments
