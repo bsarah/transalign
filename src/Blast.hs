@@ -128,12 +128,17 @@ getAlignmentsk res = map rec2align . results $ res
                                         _ -> error ("undefined blastprogram")
 
 getAlignments :: (Either String (V.Vector BlastTabularResult)) -> [(B.ByteString, [BlastAlignment])]
-getAlignments v = case v of Right x -> V.toList $ V.map evaluate (hitLines x) -- one x per query
+getAlignments v = case v of Right x -> V.toList $ V.map evaluate (V.filter hasHitsBlastTabularResult x) -- one x per query
                             Left y -> error ("blubb")
-  where evaluate btr = let query = let q = blastQuery btr in traceShow("query", B.unpack q) $ q
-                           prog = let p = blastProgram btr in traceShow("blastprogram",B.unpack p) $ p
+  where evaluate btr = let query = blastQuery btr 
+                           prog = blastProgram btr 
+                           --query = let q = blastQuery btr in traceShow("query", B.unpack q) $ q
+                           --prog = let p = blastProgram btr in traceShow("blastprogram",B.unpack p) $ p
                            ba = hit2align prog $ hitLines btr
                          in (query,ba)
+
+hasHitsBlastTabularResult :: BlastTabularResult -> Bool
+hasHitsBlastTabularResult x = not $ V.null (hitLines x)
 
 --for each BlastTabularResult we get a pair (ByteString,[BlastAlignment])
 
