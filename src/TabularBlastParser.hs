@@ -4,7 +4,8 @@
 -- This attoparsec module
 module TabularBlastParser (module TabularBlastParser)
 where
-import Data.Attoparsec.ByteString.Char8
+import Prelude hiding (takeWhile)
+import Data.Attoparsec.ByteString.Char8 hiding (isSpace)
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Builder as S
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -29,7 +30,7 @@ parseTabularBlasts = parseOnly genParseTabularBlasts
 data BlastTabularResult = BlastTabularResult
   { blastProgram :: !BlastProgram,
     blastQueryId :: !B.ByteString,
-    blastQueryName :: !B.ByteString,
+--    blastQueryName :: !B.ByteString,
     blastDatabase :: !B.ByteString,
     blastHitNumber :: !Int,
     hitLines :: !(V.Vector BlastTabularHit)
@@ -57,18 +58,21 @@ genParseTabularBlast = do
   --choice [string "# BLAST",string "# blast"]
   --_blastProgram <- choice [string "p",string "P",string "x",string "X"] <?> "Program"
   _blastProgram <- genParseBlastProgram <?> "Program"
-  string "\n# Query: " <?> "Query"
-  _blastQueryId <- many1 (notChar ' ')  <?> "QueryId"
-  _blastQueryName <- many1 (notChar '\n')  <?> "QueryName"
-  string "\n# Database: " <?> "Database"
-  _blastDatabase <- many1 (notChar '\n')  <?> "Db"
+  many1 (notChar '\n')
+  endOfLine
+  string "# Query: " <?> "Query"
+  --_blastQueryId <- many1 (notChar ' ') <* skipWhile (not (string "\n")) <?> "QueryId"
+  _blastQueryId <- takeWhile (not . isSpace) <* manyTill anyChar endOfLine <?> "QueryId"
+  --_blastQueryName <- many' (notChar '\n')  <?> "QueryName"
+  string "# Database: " <?> "Database"
+  _blastDatabase <- many1 (notChar '\n') <?> "Db"
   string "\n# " <?> "header linebreak"
   --fields line
   skipMany (try genParseFieldLine) <?> "Fields"
   _blastHitNumber <- decimal  <?> "Hit number"
   string " hits found\n" <?> "hits found"
   _tabularHit <- many' (try genParseBlastTabularHit)  <?> "Tabular hit"
-  return $ BlastTabularResult _blastProgram (toLB $ C.pack _blastQueryId) (toLB $ C.pack _blastQueryName) (toLB $ C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
+  return $ BlastTabularResult _blastProgram (toLB $ _blastQueryId) (toLB $ C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
 
 genParseFieldLine :: Parser ()
 genParseFieldLine = do
