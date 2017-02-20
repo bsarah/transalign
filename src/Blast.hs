@@ -130,7 +130,7 @@ getAlignmentsk res = map rec2align . results $ res
 getAlignments :: (Either String (V.Vector BlastTabularResult)) -> [(B.ByteString, [BlastAlignment])]
 getAlignments v = case v of Right x -> V.toList $ V.map evaluate (V.filter hasHitsBlastTabularResult x) -- one x per query
                             Left y -> error ("blubb")
-  where evaluate btr = let query = blastQuery btr 
+  where evaluate btr = let query = blastQueryId btr 
                            prog = blastProgram btr 
                            --query = let q = blastQuery btr in traceShow("query", B.unpack q) $ q
                            --prog = let p = blastProgram btr in traceShow("blastprogram",B.unpack p) $ p
@@ -175,7 +175,7 @@ readFilteredAlignmentMap seqs maxnum f = do
   M.fromList `fmap` extractBlast `fmap` readTabularBlasts f
   where extractBlast v = case v of Right x -> concatMap evaluate $ V.toList x
                                    Left y -> error ("blubb")
-        evaluate btr = let query = blastQuery btr
+        evaluate btr = let query = blastQueryId btr
                            prog = blastProgram btr
                            elm = head . V.toList $ hitLines btr
                            ba = hit2align prog . V.fromList . take maxnum . V.toList $ hitLines btr
