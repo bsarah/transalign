@@ -46,7 +46,7 @@ qname = head . B.words . unSL . query
 sname :: BlastHit -> B.ByteString
 sname = head . B.words . unSL . subject
 
-data BlastProg = BlastX | BlastP -- etc
+--data BlastProg = BlastX | BlastP -- etc
 
 {-
 hit2alignk :: BlastProg -> BlastHit -> [BlastAlignment]
