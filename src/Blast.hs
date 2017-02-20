@@ -39,6 +39,7 @@ type BlastAlignment = (B.ByteString,BlastAlignData)
 
 newtype SeqId a = S a deriving (Show,Ord,Eq)
 
+
 qname :: BlastRecord -> B.ByteString
 qname = head . B.words . unSL . query
 
@@ -47,9 +48,12 @@ sname = head . B.words . unSL . subject
 
 data BlastProg = BlastX | BlastP -- etc
 
+{-
 hit2alignk :: BlastProg -> BlastHit -> [BlastAlignment]
 hit2alignk p h = [(sname h, a) | a <- map (match2alignk p) $ matches h]
-        
+-}
+
+{-
 -- | Construct an alignment from a BlastMatch data structure.
 -- Warning: blastx-specific!
 -- BlastMatch has two attributes qseq and hseq :: ByteString, additionally q_from,q_to,h_from,h_to as Int 
@@ -69,7 +73,7 @@ match2alignk prog m = G.map add_score $ go qstart hstart (qseq m) (hseq m)
         hstart = h_from m
         hit_length = (h_to m- h_from m + 1)
         add_score (p,q) = (A (fromIntegral p) (fromIntegral q) (double2Float (bits m/fromIntegral hit_length)))
-        
+-}        
 {-
 -- merge different HSPs
 -- each position in query must map to a unique position in target        
@@ -85,13 +89,14 @@ unify = uniq . sort . concat
         uniq [] = []
 -}
 
-calculateScore :: B.ByteString -> BlastTabularHit -> BlastAlignData
+calculateScore :: BlastProgram -> BlastTabularHit -> BlastAlignData
 calculateScore prog bth = G.map add_score $ go (queryStart bth) (hitSeqStart bth) (querySeq bth) (subjectSeq bth)
   where (hstep,qstep) = let arr = B.words prog
                             p = arr!!0
-                          in case (B.unpack p) of "BLASTX" -> (1,3) -- blastx? (1,1) else
-                                                  "BLASTP" -> (1,1)
-                                                  _ -> error ("undefined blastprogram")
+                          in case prog of BlastX -> (1,3) -- blastx? (1,1) else
+                                          BlastP -> (1,1)
+                                          BlastN -> (1,1)
+                                          _ -> error ("undefined blastprogram")
                                                 -- etc.
         go qi hi qsq hsq = case (B.uncons (querySeq bth),B.uncons (subjectSeq bth)) of
           (Just ('-',qs),Just (_h,hs)) -> go qi (hi+hstep) qs hs
@@ -106,7 +111,7 @@ calculateScore prog bth = G.map add_score $ go (queryStart bth) (hitSeqStart bth
         add_score (p,q) = (A (fromIntegral p) (fromIntegral q) (double2Float (bitScore bth/fromIntegral hit_length)))
 
 
-hit2align :: B.ByteString -> (V.Vector BlastTabularHit) -> [BlastAlignment]
+hit2align :: BlastProgram -> (V.Vector BlastTabularHit) -> [BlastAlignment]
 hit2align p v = V.toList $ V.map evaluate v
   where evaluate bth = let subject = subjectId bth
                            score = calculateScore p bth
@@ -119,6 +124,7 @@ type BlastId = B.ByteString
 targets :: BlastMap -> [SeqId B.ByteString]
 targets = map (S . fst) . concat . map snd . M.toList
 
+{-
 -- | Extract the set of alignments from a Blast XML file
 getAlignmentsk :: BlastResult -> [(B.ByteString, [BlastAlignment])]
 getAlignmentsk res = map rec2align . results $ res
@@ -126,6 +132,8 @@ getAlignmentsk res = map rec2align . results $ res
         prog = case blastprogram res of "BLASTP" -> BlastP
                                         "BLASTX" -> BlastX
                                         _ -> error ("undefined blastprogram")
+-}
+
 
 getAlignments :: (Either String (V.Vector BlastTabularResult)) -> [(B.ByteString, [BlastAlignment])]
 getAlignments v = case v of Right x -> V.toList $ V.map evaluate (V.filter hasHitsBlastTabularResult x) -- one x per query
@@ -142,23 +150,30 @@ hasHitsBlastTabularResult x = not $ V.null (hitLines x)
 
 --for each BlastTabularResult we get a pair (ByteString,[BlastAlignment])
 
+{-
 -- | Read a set of alignments from a BlastXML file
 readAlignmentsk :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
 readAlignmentsk f = getAlignmentsk `fmap` readCSV f
+-}
+
 
 -- | Read a set of alignments from a Blast CSV file
 readAlignments :: FilePath -> IO [(B.ByteString, [BlastAlignment])]
 readAlignments f = getAlignments `fmap` readTabularBlasts f
 
 
+{-
 -- | Read alignments, and return a Map for query to set of alignments
 readAlignmentMapk :: FilePath -> IO BlastMap
 readAlignmentMapk f = M.fromList `fmap` getAlignmentsk `fmap` readCSV f
+-}
+
 
 readAlignmentMap :: FilePath -> IO BlastMap
 readAlignmentMap f = M.fromList `fmap` getAlignments `fmap` readTabularBlasts f
 
 
+{-
 -- | Read Blast alignments, but only for the given seqids, and with a max no of hits per seqid
 readFilteredAlignmentMapk :: [SeqId B.ByteString] -> Int -> FilePath -> IO BlastMap
 readFilteredAlignmentMapk seqs maxnum f = do
@@ -169,6 +184,8 @@ readFilteredAlignmentMapk seqs maxnum f = do
         prog r = case blastprogram r of "blastp" -> BlastP
                                         "blastx" -> BlastX
                                         _ -> error ("undefined blastprogram")
+-}
+
 
 readFilteredAlignmentMap :: [SeqId B.ByteString] -> Int -> FilePath -> IO BlastMap
 readFilteredAlignmentMap seqs maxnum f = do
@@ -216,6 +233,7 @@ trd' :: A -> Float
 trd' (A _ _ z) = z
 
 
+--functions to read csv, now replaced with tabular blast parser
 
 -- ATTENTION: Cassava supports csv lines with AT MOST 15 columns!!!
 -- try to change readXML into readCSV but keep the data structure
