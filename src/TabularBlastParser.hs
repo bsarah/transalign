@@ -12,6 +12,7 @@ import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Vector as V
 import System.Directory
 import Data.Char
+import Control.Monad
 
 -- | reads and parses tabular Blast result from provided filePath
 readTabularBlasts :: String -> IO (Either String (V.Vector BlastTabularResult))
@@ -71,7 +72,7 @@ genParseTabularBlast = do
   skipMany (try genParseFieldLine) <?> "Fields"
   _blastHitNumber <- decimal  <?> "Hit number"
   string " hits found\n" <?> "hits found"
-  _tabularHit <- many' (try genParseBlastTabularHit)  <?> "Tabular hit"
+  _tabularHit <- count  _blastHitNumber (try genParseBlastTabularHit)  <?> "Tabular hit"
   return $ BlastTabularResult _blastProgram (toLB $ _blastQueryId) (toLB $ C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
 
 genParseFieldLine :: Parser ()
@@ -102,6 +103,9 @@ data BlastTabularHit = BlastTabularHit
 
 genParseBlastTabularHit :: Parser BlastTabularHit
 genParseBlastTabularHit = do
+  --start <- peekChar'
+  --when (start == '#') (fail "irgendwas")
+  --_queryId <- takeWhile (\c ->  c /= '#' || c /= '\t')  <?> "hit qid"
   _queryId <- many1 (notChar '\t') <?> "hit qid"
   char '\t'
   _subjectId <- many1 (notChar '\t') <?> "hit sid"
