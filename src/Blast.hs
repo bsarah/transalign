@@ -91,13 +91,10 @@ unify = uniq . sort . concat
 
 calculateScore :: BlastProgram -> BlastTabularHit -> BlastAlignData
 calculateScore prog bth = G.map add_score $ go (queryStart bth) (hitSeqStart bth) (querySeq bth) (subjectSeq bth)
-  where (hstep,qstep) = let arr = B.words prog
-                            p = arr!!0
-                          in case prog of BlastX -> (1,3) -- blastx? (1,1) else
-                                          BlastP -> (1,1)
-                                          BlastN -> (1,1)
-                                          _ -> error ("undefined blastprogram")
-                                                -- etc.
+  where (hstep,qstep) = case prog of BlastX -> (1,3) -- blastx? (1,1) else
+                                     BlastP -> (1,1)
+                                     BlastN -> (1,1)
+                                     
         go qi hi qsq hsq = case (B.uncons (querySeq bth),B.uncons (subjectSeq bth)) of
           (Just ('-',qs),Just (_h,hs)) -> go qi (hi+hstep) qs hs
           (Just (_q,qs),Just ('-',hs)) -> go (qi+qstep) hi qs hs
