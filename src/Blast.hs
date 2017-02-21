@@ -95,7 +95,7 @@ calculateScore prog bth = G.map add_score $ go (queryStart bth) (hitSeqStart bth
                                      BlastP -> (1,1)
                                      BlastN -> (1,1)
                                      
-        go qi hi qsq hsq = case (B.uncons (querySeq bth),B.uncons (subjectSeq bth)) of
+        go qi hi qsq hsq = case (B.uncons qsq,B.uncons hsq) of
           (Just ('-',qs),Just (_h,hs)) -> go qi (hi+hstep) qs hs
           (Just (_q,qs),Just ('-',hs)) -> go (qi+qstep) hi qs hs
           (Just (_q,qs),Just (_h,hs))   -> (qi,hi) `G.cons` go (qi+qstep) (hi+hstep) qs hs
