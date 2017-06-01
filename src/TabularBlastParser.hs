@@ -15,7 +15,7 @@ import Data.Char
 import Control.Monad
 
 -- | reads and parses tabular Blast result from provided filePath
-readTabularBlasts :: String -> IO (Either String (V.Vector BlastTabularResult))
+readTabularBlasts :: String -> IO (Either String [BlastTabularResult])
 readTabularBlasts filePath = do
   blastFileExists <- doesFileExist filePath
   if blastFileExists
@@ -25,7 +25,7 @@ readTabularBlasts filePath = do
        return parsedBlast
      else return (Left ("Provided tabular blast file does not exist at:" ++ filePath))
 
-parseTabularBlasts :: C.ByteString -> Either String (V.Vector BlastTabularResult)
+parseTabularBlasts :: C.ByteString -> Either String [BlastTabularResult]
 parseTabularBlasts = parseOnly genParseTabularBlasts
 
 data BlastTabularResult = BlastTabularResult
@@ -41,10 +41,10 @@ data BlastTabularResult = BlastTabularResult
 data BlastProgram = BlastX | BlastP | BlastN
   deriving (Show, Eq)
 
-genParseTabularBlasts :: Parser (V.Vector BlastTabularResult)
+genParseTabularBlasts :: Parser [BlastTabularResult]
 genParseTabularBlasts = do
   bresults <- many1 genParseTabularBlast
-  return (V.fromList bresults)
+  return bresults
 
 genParseBlastProgram :: Parser BlastProgram
 genParseBlastProgram = do
