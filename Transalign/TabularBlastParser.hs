@@ -2,8 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 -- This attoparsec module
-module TabularBlastParser (module TabularBlastParser)
-where
+module Transalign.TabularBlastParser where
+
 import Prelude hiding (takeWhile)
 import Data.Attoparsec.ByteString.Char8 hiding (isSpace)
 import qualified Data.Attoparsec.ByteString.Lazy as L
@@ -34,8 +34,9 @@ parseTabularBlasts :: B.ByteString -> [BlastTabularResult]
 parseTabularBlasts = go
   where go xs = case L.parse genParseTabularBlast xs of
           L.Fail remainingInput ctxts err  -> error $ "parseTabularBlasts failed! " ++ err ++ " ctxt: " ++ show ctxts ++ " head of remaining input: " ++ (B.unpack $ B.take 1000 remainingInput)
-          L.Done remainingInput btr ->
-            btr : go remainingInput
+          L.Done remainingInput btr
+            | B.null remainingInput  -> [btr]
+            | otherwise              -> btr : go remainingInput
 
 data BlastTabularResult = BlastTabularResult
   { blastProgram :: !BlastProgram,
@@ -50,10 +51,10 @@ data BlastTabularResult = BlastTabularResult
 data BlastProgram = BlastX | BlastP | BlastN
   deriving (Show, Eq)
 
-genParseTabularBlasts :: Parser [BlastTabularResult]
-genParseTabularBlasts = do
-  bresults <- many1 genParseTabularBlast
-  return bresults
+--genParseTabularBlasts :: Parser [BlastTabularResult]
+--genParseTabularBlasts = do
+--  bresults <- many1 genParseTabularBlast
+--  return bresults
 
 genParseBlastProgram :: Parser BlastProgram
 genParseBlastProgram = do

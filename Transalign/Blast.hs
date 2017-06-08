@@ -8,7 +8,7 @@
 {-# LANGUAGE CPP #-}
 
 
-module Blast where
+module Transalign.Blast where
 
 import qualified Data.ByteString.Lazy.Char8 as B
 --import qualified Data.ByteString.Char8 as C
@@ -30,9 +30,9 @@ import Debug.Trace
 import Data.Int
 import Text.Printf
 import GHC.Float (double2Float)
-import Align
 
-import TabularBlastParser
+import Transalign.Align
+import Transalign.TabularBlastParser
 
 type BlastAlignData = Alignment Float Int32 Int32
 type BlastAlignment = (B.ByteString,BlastAlignData)

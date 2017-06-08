@@ -14,7 +14,7 @@
 {-# Language FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 
-module Align (A(..),Alignment,score,collect_aligns,merge_aligns) where
+module Transalign.Align (A(..),Alignment,score,collect_aligns,merge_aligns) where
 
 import Control.Applicative ( (<$>) )
 import qualified Data.IntMap.Strict as M
