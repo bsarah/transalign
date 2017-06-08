@@ -52,7 +52,7 @@ maybeBuildCache (warn,log) sp = do
   d <- doesDirectoryExist (sp++".d")
   if not d
     then do
-      log ("Building cache for BLAST output "++show sp++", this might take a while..")
+      log ("Building cache for BLAST output "++show sp++", this might take a while..\n")
       buildCache sp
       log "..done!\n"
     else do

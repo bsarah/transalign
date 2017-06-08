@@ -13,12 +13,14 @@ import Data.Vector.Unboxed.Deriving
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable
 import System.Directory (createDirectoryIfMissing, removeFile, doesFileExist, doesDirectoryExist)
+import System.FilePath ((</>))
 import Control.DeepSeq
 import Control.Arrow (second)
 import Data.Hashable
 import Text.Printf
 import Debug.Trace
 import System.IO (stderr,hPutStrLn)
+import qualified Codec.Compression.GZip as GZip
 
 import Blast (readAlignments, BlastAlignment)
 import Align (A(..))
@@ -41,7 +43,11 @@ writeAlignmentCache dir (qsid',ts) = do
   let qsid = B.unpack qsid'
       dnew = printf "%03d" $ hash qsid `mod` 1000
   createDirectoryIfMissing True (dir ++ "/" ++ dnew)
-  encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
+--  encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
+  B.writeFile (dir++"/"++dnew++"/"++B.unpack qsid')
+    $ GZip.compress
+    $ encode
+    $ map ( convert.second U.toList) ts
       where convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest)
 --  encodeFile :: Binary a => FilePath -> a -> IO () equal to: B.writeFile f . encode
 --  encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
@@ -55,18 +61,22 @@ writeAlignmentCache dir (qsid',ts) = do
 readAlignmentCache :: String -> String -> IO [BlastAlignment]
 readAlignmentCache dir qsid = do
   let dnew = printf "%03d" $ hash qsid `mod` 1000
-  dfeNew <- doesFileExist (dir++"/"++dnew++"/"++qsid)
-  dfeOld <- doesFileExist (dir++"/"++qsid)
+  let fnew = dir </> dnew </> qsid
+  let fold = dir </> qsid
+  dfeNew <- doesFileExist fnew
+  dfeOld <- doesFileExist fold
 --  print (dir,dnew,qsid,dfe)
-  xNew <- {- traceShow(dir,dnew,qsid,dfe) $ -} if dfeNew then B.readFile (dir++"/"++dnew++"/"++qsid) else return B.empty
-  xOld <- if dfeOld then B.readFile (dir++"/"++qsid) else return B.empty
---B.readFile (dir++"/"++qsid)
---  x <- B.readFile (dir++"/"++qsid)
+  xNew <- if dfeNew
+            then GZip.decompress <$> B.readFile fnew
+            else return B.empty
+  xOld <- if dfeOld
+            then B.readFile fold
+            else return B.empty
   let unconvert (name,s,pqs) = let nm = B.copy name
                                    v = U.fromListN (length pqs) $ map (\(p,q) -> (A p q s)) pqs
                                in nm `seq` v `seq` (nm, v)
   case (B.null xNew , B.null xOld) of
-    (True,True) -> do hPutStrLn stderr $ "ERROR: cache file not found: " ++ dir ++ "/" ++ "(" ++ dnew ++ ")" ++ qsid
+    (True,True) -> do hPutStrLn stderr $ "ERROR: cache file not found: " ++ fnew
                       return []
     (True,_   ) -> return $!! map unconvert $ decode $ xOld
     (_   ,True) -> return $!! map unconvert $ decode $ xNew
