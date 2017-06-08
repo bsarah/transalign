@@ -14,20 +14,28 @@ import qualified Data.Vector as V
 import System.Directory
 import Data.Char
 import Control.Monad
+import Debug.Trace
+import Text.Printf
 
 -- | reads and parses tabular Blast result from provided filePath
-readTabularBlasts :: String -> IO (Either String [BlastTabularResult])
+readTabularBlasts :: String -> IO [BlastTabularResult]
 readTabularBlasts filePath = do
+  printf "# reading tabular blast input from file %s\n" filePath
   blastFileExists <- doesFileExist filePath
   if blastFileExists
-     then do
-       blastData <- B.readFile filePath
-       let parsedBlast = parseTabularBlasts blastData
-       return parsedBlast
-     else return (Left ("Provided tabular blast file does not exist at:" ++ filePath))
+     then parseTabularBlasts <$> B.readFile filePath
+     else fail "# tabular blast file \"%s\" does not exist\n" filePath
 
-parseTabularBlasts :: B.ByteString -> Either String [BlastTabularResult]
-parseTabularBlasts blastData = L.eitherResult (L.parse genParseTabularBlasts blastData)
+-- |Read a lazy bytestring and stream out a lsit of @BlastTabularResult@'s.
+-- In case, there is a parse error "late" in the file, we might have
+-- already streamed out some (or many!) of these results.
+
+parseTabularBlasts :: B.ByteString -> [BlastTabularResult]
+parseTabularBlasts = go
+  where go xs = case L.parse genParseTabularBlast xs of
+          L.Fail remainingInput ctxts err  -> error $ "parseTabularBlasts failed! " ++ err ++ " ctxt: " ++ show ctxts ++ " head of remaining input: " ++ (B.unpack $ B.take 1000 remainingInput)
+          L.Done remainingInput btr ->
+            btr : go remainingInput
 
 data BlastTabularResult = BlastTabularResult
   { blastProgram :: !BlastProgram,
@@ -107,9 +115,9 @@ genParseBlastTabularHit = do
   --start <- peekChar'
   --when (start == '#') (fail "irgendwas")
   --_queryId <- takeWhile (\c ->  c /= '#' || c /= '\t')  <?> "hit qid"
-  _queryId <- many1 (notChar '\t') <?> "hit qid"
+  _queryId <- takeWhile1 ((/=9) . ord) <?> "hit qid"
   char '\t'
-  _subjectId <- many1 (notChar '\t') <?> "hit sid"
+  _subjectId <- takeWhile1 ((/=9) . ord) <?> "hit sid"
   char '\t'
   _seqIdentity <- double <?> "hit seqid"
   char '\t'
@@ -133,11 +141,11 @@ genParseBlastTabularHit = do
   char '\t'
   _subjectFrame <- decimal <?> "hit sF"
   char '\t'
-  _querySeq <- many1 (satisfy bioLetters) <?> "hit qseq"
+  _querySeq <- takeWhile1 ((/=9) . ord) <?> "hit qseq" -- 9 == '\t'
   char '\t'
-  _subjectSeq <- many1 (satisfy bioLetters) <?> "hit subSeq"
+  _subjectSeq <- takeWhile1 ((/=10) . ord) <?> "hit subSeq" -- 10 == '\n'
   char '\n'
-  return $ BlastTabularHit (B.pack _queryId) (B.pack _subjectId) _seqIdentity _alignmentLength _misMatches _gapOpenScore _queryStart _queryEnd _hitSeqStart _hitSeqEnd _eValue _bitScore _subjectFrame (B.pack $ map (chr . fromEnum) _querySeq) (B.pack $ map (chr . fromEnum) _subjectSeq)
+  return $ BlastTabularHit (B.fromStrict _queryId) (B.fromStrict _subjectId) _seqIdentity _alignmentLength _misMatches _gapOpenScore _queryStart _queryEnd _hitSeqStart _hitSeqEnd _eValue _bitScore _subjectFrame (B.fromStrict _querySeq) (B.fromStrict _subjectSeq)
   
 --IUPAC amino acid with gap
 --aminoacidLetters :: Char -> Bool
@@ -149,7 +157,7 @@ nucleotideLetters = inClass "AGTCURYSWKMBDHVN-."
 
 --IUPAC nucleic acid characters with gap
 --bioLetters :: Char -> Bool
-bioLetters = inClass "ABCDEFGHIJKLMNOPQRSTVWXYZ.-"
+bioLetters = inClass "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-"
 
 
 toLB :: C.ByteString -> B.ByteString
