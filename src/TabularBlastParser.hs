@@ -5,8 +5,8 @@
 module TabularBlastParser (module TabularBlastParser)
 where
 import Prelude hiding (takeWhile)
---import Data.Attoparsec.ByteString.Char8 hiding (isSpace)
-import Data.Attoparsec.ByteString.Lazy hiding (isSpace)
+import Data.Attoparsec.ByteString.Char8 hiding (isSpace)
+import qualified Data.Attoparsec.ByteString.Lazy as L
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Builder as S
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -27,7 +27,7 @@ readTabularBlasts filePath = do
      else return (Left ("Provided tabular blast file does not exist at:" ++ filePath))
 
 parseTabularBlasts :: B.ByteString -> Either String [BlastTabularResult]
-parseTabularBlasts = parseOnly genParseTabularBlasts
+parseTabularBlasts blastData = L.eitherResult (L.parse genParseTabularBlasts blastData)
 
 data BlastTabularResult = BlastTabularResult
   { blastProgram :: !BlastProgram,
