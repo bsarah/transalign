@@ -16,11 +16,11 @@ import Data.Ord
 import System.Mem (performGC)
 import Control.Parallel.Strategies
 
-import Align (collect_aligns,merge_aligns)
-import Blast (BlastAlignment, BlastAlignData, readAlignments)
-import BlastCache (readAlignmentCache, buildCache)
+import Transalign.Align (collect_aligns,merge_aligns)
+import Transalign.Blast (BlastAlignment, BlastAlignData, readAlignments)
+import Transalign.BlastCache (readAlignmentCache, buildCache)
 import Options (getArgs, Opts(..))
-import Output (output_long, output_short, add_score)
+import Transalign.Output (output_long, output_short, add_score)
 
 main :: IO ()
 main = do

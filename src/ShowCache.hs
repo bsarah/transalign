@@ -1,11 +1,14 @@
-import BlastCache (readAlignmentCache)
-import Blast (print_alignment)
-import Output
+module Main where
 
 import System.Environment (getArgs)
 import System.FilePath (splitFileName)
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.List (partition)
+
+import Transalign.BlastCache (readAlignmentCache)
+import Transalign.Blast (print_alignment)
+import Transalign.Output
+
 
 main :: IO ()
 main = do 

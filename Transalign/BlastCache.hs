@@ -2,7 +2,7 @@
 {-# Language DoAndIfThenElse #-}
 
 -- Convert BlastXML to a directory with one file per query sequence
-module BlastCache where
+module Transalign.BlastCache where
 
 import Data.Binary
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -20,10 +20,14 @@ import Data.Hashable
 import Text.Printf
 import Debug.Trace
 import System.IO (stderr,hPutStrLn)
-import qualified Codec.Compression.GZip as GZip
+import qualified Codec.Compression.LZ4 as LZ4
+import qualified Control.Concurrent.ParallelIO.Local as PIO
+import qualified Data.List.Split as LS
+import System.Mem
+import qualified Data.Serialize as Cereal
 
-import Blast (readAlignments, BlastAlignment)
-import Align (A(..))
+import Transalign.Blast (readAlignments, BlastAlignment)
+import Transalign.Align (A(..))
 
 -- | Take a Blast XML file, and split it into a directory with one file
 --   per query sequence containing a list of target sequences with alignemnts.
@@ -43,18 +47,12 @@ writeAlignmentCache dir (qsid',ts) = do
   let qsid = B.unpack qsid'
       dnew = printf "%03d" $ hash qsid `mod` 1000
   createDirectoryIfMissing True (dir ++ "/" ++ dnew)
---  encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
-  B.writeFile (dir++"/"++dnew++"/"++B.unpack qsid')
-    $ GZip.compress
-    $ encode
+  BS.writeFile (dir++"/"++dnew++"/"++B.unpack qsid')
+    $ maybe (error "writeAlignmentCache: LZ4.compress failed!") id
+    $ LZ4.compress
+    $ Cereal.encode
     $ map ( convert.second U.toList) ts
       where convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest)
---  encodeFile :: Binary a => FilePath -> a -> IO () equal to: B.writeFile f . encode
---  encodeFile (dir++"/"++dnew++"/"++B.unpack qsid') $ map ( convert.second U.toList) ts
---  let res = encode $ map ( convert.second U.toList) ts
---  B.writeFile (dir++"/"++dnew++"/"++B.unpack qsid') res
---      where {-convert (name,[]) = (name,0,[])-}
---            convert (name,rest@((A _ _ s):_)) = (name,s,map (\(A a b _) -> (a,b)) rest) -- s=score, with list of all aligned positions [(a,b)]
 
 
 -- | Given the directory and a query sequence, extract the alignments
@@ -65,21 +63,22 @@ readAlignmentCache dir qsid = do
   let fold = dir </> qsid
   dfeNew <- doesFileExist fnew
   dfeOld <- doesFileExist fold
---  print (dir,dnew,qsid,dfe)
   xNew <- if dfeNew
-            then GZip.decompress <$> B.readFile fnew
-            else return B.empty
+            then maybe (error "readAlignmentCache: LZ4.decompress failed!") id
+                  <$> LZ4.decompress
+                  <$> BS.readFile fnew
+            else return BS.empty
   xOld <- if dfeOld
-            then B.readFile fold
-            else return B.empty
-  let unconvert (name,s,pqs) = let nm = B.copy name
+            then BS.readFile fold
+            else return BS.empty
+  let unconvert (name,s,pqs) = let nm = B.fromStrict $ BS.copy name
                                    v = U.fromListN (length pqs) $ map (\(p,q) -> (A p q s)) pqs
                                in nm `seq` v `seq` (nm, v)
-  case (B.null xNew , B.null xOld) of
+  case (BS.null xNew , BS.null xOld) of
     (True,True) -> do hPutStrLn stderr $ "ERROR: cache file not found: " ++ fnew
                       return []
-    (True,_   ) -> return $!! map unconvert $ decode $ xOld
-    (_   ,True) -> return $!! map unconvert $ decode $ xNew
+    (True,_   ) -> return $!! map unconvert $ either error id $ Cereal.decode $ xOld
+    (_   ,True) -> return $!! map unconvert $ either error id $ Cereal.decode $ xNew
     (_   ,_   ) -> return []
 
 {-

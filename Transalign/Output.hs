@@ -1,4 +1,4 @@
-module Output where
+module Transalign.Output where
 
 import qualified Data.ByteString.Lazy.Char8 as B
 import Text.Printf (printf)
@@ -9,8 +9,8 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable
 
 
-import Blast (BlastAlignData, print_alignment)
-import Align (Alignment,score,A(..))
+import Transalign.Blast (BlastAlignData, print_alignment)
+import Transalign.Align (Alignment,score,A(..))
 
 output_long :: B.ByteString -> [(Float,B.ByteString,BlastAlignData)] -> IO ()
 output_long src = do 

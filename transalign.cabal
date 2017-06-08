@@ -11,35 +11,97 @@ Category:            Bioinformatics
 Build-type:          Simple
 Cabal-version:       >=1.10.0
 
-Executable transalign
-   Main-Is:        TransAlign.hs
-   Other-modules:  Align, Blast, BlastCache, Options, Output, TabularBlastParser
-   Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3, cassava >= 0.4.5.0, attoparsec >= 0.13.0, filepath, zlib >= 0.6
-   Ghc-Options:  -rtsopts -threaded -Odph -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100 -feager-blackholing
+library
+  build-depends: base   >= 4.7
+               , attoparsec
+               , binary
+               , biocore
+               , blastxml
+               , bytestring
+               , cassava
+               , containers
+               , deepseq
+               , directory
+               , filepath
+               , hashable
+               , judy == 0.2.3
+               , parallel
+               , parallel-io >= 0.3.3
+               , split
+               , unordered-containers
+               , vector
+               , vector-algorithms
+               , vector-th-unbox
+               , lz4    >= 0.2
+               , cereal >= 0.5
 
-Executable blastextract
-   Main-Is:        BlastExtract.hs
-   Other-modules:  Align, Blast, BlastCache, TabularBlastParser
-   Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring >= 0.9, binary, directory, deepseq, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3,  cassava >= 0.4.5.0, attoparsec >= 0.13.0, filepath, zlib >= 0.6
-   Ghc-Options:  -rtsopts -threaded -feager-blackholing
+  exposed-modules:
+    Transalign.Align
+    Transalign.Blast
+    Transalign.BlastCache
+    Transalign.Output
+    Transalign.TabularBlastParser
+  default-extensions: BangPatterns
+                    , OverloadedStrings
+  default-language:
+    Haskell2010
+  ghc-options:
+    -O2 -funbox-strict-fields
 
-Executable showcache
-   Main-Is:        ShowCache.hs
-   Other-modules:  Align, Blast, BlastCache, Output, TabularBlastParser
-   Hs-Source-Dirs: src
-   Build-Depends:  base >= 3, blastxml >= 0.3, containers >= 0.5, bytestring >= 0.9, binary, directory, filepath, deepseq, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3,  cassava >= 0.4.5.0, attoparsec >= 0.13.0, filepath, zlib >= 0.6
-   Ghc-Options:  -rtsopts -threaded -feager-blackholing
+executable transalign
+  main-is:        TransAlign.hs
+  other-modules:
+    Options
+  hs-source-dirs: src
 
---Executable transalign_prof
---   Main-Is:        TransAlign.hs
---   Other-modules:  Align, Blast, BlastCache, Output, Options
---   Hs-Source-Dirs: src
---   Build-Depends:  base >= 3, containers >= 0.5, blastxml >= 0.3, bytestring >= 0.9, binary, directory, deepseq, cmdargs, biocore, vector, vector-th-unbox, template-haskell >= 2.5, vector-algorithms >= 0.6, parallel, hashable, unordered-containers, judy == 0.2.3, filemanip >= 0.3,  cassava >= 0.4.5.0, attoparsec >= 0.13.0
---   Ghc-Options:  -prof -fprof-auto-top -rtsopts -threaded -rtsopts -Odph -fno-liberate-case -funfolding-use-threshold100 -funfolding-keeness-factor100 -feager-blackholing
-Library
-  Hs-Source-Dirs:      ./src/
-  ghc-options:         -Wall -O2 -fno-warn-unused-do-bind
-  build-depends:       base >=4.5 && <5, cmdargs, blastxml>=0.3.2, bytestring, vector, attoparsec, directory
-  Exposed-Modules:     TabularBlastParser
+  build-depends: base >= 4.7
+               , cmdargs
+               , parallel
+               , directory
+               , containers
+               , bytestring
+               --
+               , transalign
+
+  ghc-options:
+    -rtsopts
+    -threaded
+    -O2
+    -fno-liberate-case
+    -funfolding-use-threshold100
+    -funfolding-keeness-factor100
+    -feager-blackholing
+
+executable blastextract
+  main-is:        BlastExtract.hs
+  hs-source-dirs: src
+
+  build-depends: base >= 4.7
+               --
+               , transalign
+  ghc-options:
+    -rtsopts
+    -O2
+    -threaded
+    -feager-blackholing
+
+executable showcache
+  main-is:        ShowCache.hs
+  hs-source-dirs: src
+
+  build-depends: base >= 4.7
+               , filepath
+               , bytestring
+               --
+               , transalign
+  ghc-options:
+    -rtsopts
+    -O2
+    -threaded
+    -feager-blackholing
+
+--Library
+--  Hs-Source-Dirs:      ./src/
+--  ghc-options:         -Wall -O2 -fno-warn-unused-do-bind
+--  build-depends:       base >=4.5 && <5, cmdargs, blastxml>=0.3.2, bytestring, vector, attoparsec, directory
+--  Exposed-Modules:     TabularBlastParser
