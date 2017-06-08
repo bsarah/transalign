@@ -5,7 +5,8 @@
 module TabularBlastParser (module TabularBlastParser)
 where
 import Prelude hiding (takeWhile)
-import Data.Attoparsec.ByteString.Char8 hiding (isSpace)
+--import Data.Attoparsec.ByteString.Char8 hiding (isSpace)
+import Data.Attoparsec.ByteString.Lazy hiding (isSpace)
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Builder as S
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -20,12 +21,12 @@ readTabularBlasts filePath = do
   blastFileExists <- doesFileExist filePath
   if blastFileExists
      then do
-       blastData <- C.readFile filePath
+       blastData <- B.readFile filePath
        let parsedBlast = parseTabularBlasts blastData
        return parsedBlast
      else return (Left ("Provided tabular blast file does not exist at:" ++ filePath))
 
-parseTabularBlasts :: C.ByteString -> Either String [BlastTabularResult]
+parseTabularBlasts :: B.ByteString -> Either String [BlastTabularResult]
 parseTabularBlasts = parseOnly genParseTabularBlasts
 
 data BlastTabularResult = BlastTabularResult
@@ -73,7 +74,7 @@ genParseTabularBlast = do
   _blastHitNumber <- decimal  <?> "Hit number"
   string " hits found\n" <?> "hits found"
   _tabularHit <- count  _blastHitNumber (try genParseBlastTabularHit)  <?> "Tabular hit"
-  return $ BlastTabularResult _blastProgram (toLB $ _blastQueryId) (toLB $ C.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
+  return $ BlastTabularResult _blastProgram (toLB $ _blastQueryId) (B.pack _blastDatabase) _blastHitNumber (V.fromList _tabularHit)
 
 genParseFieldLine :: Parser ()
 genParseFieldLine = do
@@ -136,18 +137,18 @@ genParseBlastTabularHit = do
   char '\t'
   _subjectSeq <- many1 (satisfy bioLetters) <?> "hit subSeq"
   char '\n'
-  return $ BlastTabularHit (B.pack _queryId) (B.pack _subjectId) _seqIdentity _alignmentLength _misMatches _gapOpenScore _queryStart _queryEnd _hitSeqStart _hitSeqEnd _eValue _bitScore _subjectFrame (B.pack _querySeq) (B.pack _subjectSeq)
+  return $ BlastTabularHit (B.pack _queryId) (B.pack _subjectId) _seqIdentity _alignmentLength _misMatches _gapOpenScore _queryStart _queryEnd _hitSeqStart _hitSeqEnd _eValue _bitScore _subjectFrame (B.pack $ map (chr . fromEnum) _querySeq) (B.pack $ map (chr . fromEnum) _subjectSeq)
   
 --IUPAC amino acid with gap
-aminoacidLetters :: Char -> Bool
+--aminoacidLetters :: Char -> Bool
 aminoacidLetters = inClass "ARNDCQEGHILMFPSTWYVBZX-"
 
 --IUPAC nucleic acid characters with gap
-nucleotideLetters :: Char -> Bool
+--nucleotideLetters :: Char -> Bool
 nucleotideLetters = inClass "AGTCURYSWKMBDHVN-."
 
 --IUPAC nucleic acid characters with gap
-bioLetters :: Char -> Bool
+--bioLetters :: Char -> Bool
 bioLetters = inClass "ABCDEFGHIJKLMNOPQRSTVWXYZ.-"
 
 
